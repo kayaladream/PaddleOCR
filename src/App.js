@@ -41,19 +41,17 @@ const preprocessText = (text) => {
   text = text.replace(/\n{2,}/g, '\n\n');
 
   // 常见上标/下标误转
-  text = text.replace(/\$\^\{2\}\$/g, '²');
-  text = text.replace(/\$\^\{3\}\$/g, '³');
-  text = text.replace(/\$\^\{1\}\$/g, '¹');
-  text = text.replace(/\$\^\{0\}\$/g, '⁰');
-  text = text.replace(/\$\^\{4\}\$/g, '⁴');
-  text = text.replace(/\$\^\{5\}\$/g, '⁵');
-  text = text.replace(/\$\^\{6\}\$/g, '⁶');
-  text = text.replace(/\$\^\{7\}\$/g, '⁷');
-  text = text.replace(/\$\^\{8\}\$/g, '⁸');
-  text = text.replace(/\$\^\{9\}\$/g, '⁹');
-  text = text.replace(/\$\^\{n\}\$/g, 'ⁿ');
-  text = text.replace(/\$\^\{m\}\$/g, 'ᵐ');
-  text = text.replace(/\$\^\{([^}]+)\}\$/g, '^$1'); // 其他未知上标保留 ^ 形式
+  text = text.replace(/\s*\$\^\{([^}]+)\}\$\s*/g, (match, exponent) => {
+    const superscripts = {
+      '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+      '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+      'n': 'ⁿ', 'm': 'ᵐ'
+    };
+    if (exponent in superscripts) {
+      return superscripts[exponent];
+    }
+    return '^' + exponent; // 其他未知上标保留 ^ 形式
+  });
 
   // 恢复表格
   text = text.replace(/__TABLE_(\d+)__/g, (_, i) => `\n\n${tables[parseInt(i)]}\n\n`);
