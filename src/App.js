@@ -371,13 +371,11 @@ function App() {
     e.clipboardData.setData('text/plain', plain);
   };
 
-  // ====== 关键修复：解决光标跳转问题 ======
   useEffect(() => {
     if (isStreaming) return;
     const md = results[currentIndex] || '';
     setEditText(md);
     if (editDivRef.current) {
-      // 只有当焦点不在当前编辑框内时，才通过 innerHTML 刷新，防止光标乱跳
       if (document.activeElement !== editDivRef.current) {
         const html = marked.parse(md, { breaks: true });
         editDivRef.current.innerHTML = DOMPurify.sanitize(html);
