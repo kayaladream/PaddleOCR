@@ -93,8 +93,8 @@ header {
 header h1 {
   font-size: 2.2rem;
   font-weight: 700;
-  /* 标题完全复现精准过度渐变 */
-  background: linear-gradient(90deg, rgb(1, 155, 255) 0%, rgb(23, 50, 224) 50%, rgb(116, 39, 229) 100%);
+  /* 标题颜色 */
+  background: linear-gradient(90deg, rgb(19, 163, 255) 0%, rgb(11, 93, 237) 50%, rgb(116, 39, 229) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
