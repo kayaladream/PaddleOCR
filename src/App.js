@@ -139,28 +139,15 @@ function App() {
   }, [typewriterEffect]);
 
   // 并发处理多图
-  const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
-    let active = 0;
+ const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
     const queue = [...items.entries()];
-    const executing = new Set();
-    return new Promise((resolve) => {
-      const next = () => {
-        while (active < maxConcurrent && queue.length > 0) {
-          const [realIdx, item] = queue.shift();
-          active++;
-          const p = processor(item, realIdx)
-            .catch(err => console.error(err))
-            .finally(() => {
-              active--;
-              executing.delete(p);
-              next();
-            });
-          executing.add(p);
-        }
-        if (queue.length === 0 && executing.size === 0) resolve();
-      };
-      next();
+    const workers = new Array(maxConcurrent).fill().map(async () => {
+      while (queue.length > 0) {
+        const [realIdx, item] = queue.shift();
+        await processor(item, realIdx).catch(err => console.error(err));
+      }
     });
+    await Promise.all(workers);
   };
 
   // 上传图片（文件选择）
