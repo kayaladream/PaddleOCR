@@ -12,8 +12,17 @@
 - Markdown 编辑器即时修订
 - 多元化图像输入：文件选择、拖放、粘贴、远程 URL
 
-## 演示地址
-https://你的域名.vercel.app
+## 实际效果
+<div align="center">
+  <img width="1168" height="776" alt="8adb35ab-9891-42e0-98b3-bd5122bfcf3e" src="https://github.com/user-attachments/assets/924524fd-9e27-4cf5-abd9-b672f46e60e4" />
+  <br>
+  <small>手写稿的识别</small>
+</div>
+<br>
+<div align="center">
+  <img width="1168" height="776" alt="8cf2e943-71aa-4e42-812a-64295e03eee5" src="https://github.com/user-attachments/assets/595891c8-d847-4326-8ee2-6e9075c5cce3" />
+  <br>
+  <small>表格的识别</small>
 
 ## 完全免费
 使用百度 PaddleOCR 免费 API token
