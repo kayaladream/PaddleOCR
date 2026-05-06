@@ -32,8 +32,8 @@
   95% {
     color: rgba(29, 29, 31, 0);
     -webkit-text-fill-color: rgba(29, 29, 31, 0);
-    /* 采用AI Studio官方渐变色 */
-    background: linear-gradient(90deg, #1890FF, #2932E1, #7B32EB);
+    /* 采用你提供的精准RGB渐变色 */
+    background: linear-gradient(90deg, rgb(1, 155, 255), rgb(23, 50, 224), rgb(116, 39, 229));
     -webkit-background-clip: text;
     background-clip: text;
   }
@@ -51,7 +51,7 @@
 }
 
 body {
-  /* 背景调整为极浅蓝灰，更符合科技感 */
+  /* 背景极浅蓝灰 */
   background: linear-gradient(135deg, #F5F8FA 0%, #FFFFFF 100%);
   min-height: 100vh;
   position: relative;
@@ -66,10 +66,10 @@ body::before {
   right: 0;
   bottom: 0;
   background:
-    radial-gradient(circle at 0% 0%, rgba(24, 144, 255, 0.04) 0%, transparent 50%),
-    radial-gradient(circle at 100% 0%, rgba(41, 50, 225, 0.04) 0%, transparent 50%),
-    radial-gradient(circle at 100% 100%, rgba(123, 50, 235, 0.04) 0%, transparent 50%),
-    radial-gradient(circle at 0% 100%, rgba(24, 144, 255, 0.04) 0%, transparent 50%);
+    radial-gradient(circle at 0% 0%, rgba(1, 155, 255, 0.04) 0%, transparent 50%),
+    radial-gradient(circle at 100% 0%, rgba(23, 50, 224, 0.04) 0%, transparent 50%),
+    radial-gradient(circle at 100% 100%, rgba(116, 39, 229, 0.04) 0%, transparent 50%),
+    radial-gradient(circle at 0% 100%, rgba(1, 155, 255, 0.04) 0%, transparent 50%);
   z-index: -1;
   animation: backgroundShift 15s ease-in-out infinite alternate;
 }
@@ -93,8 +93,8 @@ header {
 header h1 {
   font-size: 2.2rem;
   font-weight: 700;
-  /* 标题完美复现你图片中的渐变 */
-  background: linear-gradient(90deg, #1890FF 0%, #2932E1 50%, #7B32EB 100%);
+  /* 标题完全复现精准过度渐变 */
+  background: linear-gradient(90deg, rgb(1, 155, 255) 0%, rgb(23, 50, 224) 50%, rgb(116, 39, 229) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -120,8 +120,8 @@ header p {
 }
 
 .upload-button {
-  /* 按钮完美复现图片一的紫蓝渐变 */
-  background: linear-gradient(90deg, #1890FF, #2932E1, #7B32EB);
+  /* 按钮背景精准渐变 */
+  background: linear-gradient(90deg, rgb(1, 155, 255) 0%, rgb(23, 50, 224) 50%, rgb(116, 39, 229) 100%);
   background-size: 150% 100%;
   color: white;
   padding: 1rem 2.5rem;
@@ -129,7 +129,7 @@ header p {
   font-size: 1.1rem;
   font-weight: 500;
   transition: all 0.4s ease;
-  box-shadow: 0 5px 15px rgba(41, 50, 225, 0.25);
+  box-shadow: 0 5px 15px rgba(23, 50, 224, 0.25);
   border: none;
   cursor: pointer;
   display: inline-block;
@@ -143,7 +143,7 @@ header p {
 .upload-button:hover {
   transform: translateY(-2px);
   background-position: right center;
-  box-shadow: 0 8px 20px rgba(123, 50, 235, 0.35);
+  box-shadow: 0 8px 20px rgba(116, 39, 229, 0.35);
 }
 
 .image-preview {
@@ -191,10 +191,10 @@ header p {
   bottom: 0;
   background: linear-gradient(
     90deg,
-    rgba(24,144,255,0.08),
-    rgba(41,50,225,0.08),
-    rgba(123,50,235,0.08),
-    rgba(24,144,255,0.08)
+    rgba(1, 155, 255, 0.08),
+    rgba(23, 50, 224, 0.08),
+    rgba(116, 39, 229, 0.08),
+    rgba(1, 155, 255, 0.08)
   );
   background-size: 300% 100%;
   animation: gradientMove 3s linear infinite;
@@ -203,7 +203,7 @@ header p {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #2932E1;
+  color: rgb(23, 50, 224);
   font-weight: 500;
   font-size: 1.1rem;
 }
@@ -215,7 +215,7 @@ header p {
   border-radius: 20px;
   padding: 2rem;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(41, 50, 225, 0.1);
+  border: 1px solid rgba(23, 50, 224, 0.1);
   transition: none;
   overflow-y: auto;
   max-height: 100%;
@@ -228,7 +228,7 @@ header p {
 }
 
 .loading.result-loading {
-  color: #2932E1;
+  color: rgb(23, 50, 224);
   font-weight: 500;
   font-size: 1.1rem;
   text-align: center;
@@ -247,7 +247,7 @@ header p {
   min-height: 38px;
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(41, 50, 225, 0.1);
+  border-bottom: 1px solid rgba(23, 50, 224, 0.1);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -311,7 +311,7 @@ header p {
   opacity: 0;
   animation: smoothReveal 1s ease-out forwards;
   animation-delay: calc(var(--index) * 50ms);
-  background: linear-gradient(90deg, #1890FF, #2932E1, #7B32EB);
+  background: linear-gradient(90deg, rgb(1, 155, 255), rgb(23, 50, 224), rgb(116, 39, 229));
   background-size: 300% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -341,7 +341,7 @@ header p {
 }
 
 .result-text tr:hover td {
-  background: rgba(41, 50, 225, 0.03);
+  background: rgba(23, 50, 224, 0.03);
 }
 
 .result-text table .gradient-text {
@@ -359,16 +359,16 @@ header p {
   justify-content: center;
   background: linear-gradient(
     90deg,
-    rgba(24,144,255,0.08),
-    rgba(41,50,225,0.08),
-    rgba(123,50,235,0.08),
-    rgba(24,144,255,0.08)
+    rgba(1, 155, 255, 0.08),
+    rgba(23, 50, 224, 0.08),
+    rgba(116, 39, 229, 0.08),
+    rgba(1, 155, 255, 0.08)
   );
   background-size: 300% 100%;
   animation: gradientMove 3s linear infinite;
   border-radius: 12px;
   z-index: 2;
-  color: #2932E1;
+  color: rgb(23, 50, 224);
   font-weight: 500;
   font-size: 1.1rem;
 }
@@ -389,10 +389,10 @@ header p {
 }
 
 .upload-zone.dragging {
-  border-color: #2932E1;
-  background: rgba(41, 50, 225, 0.05);
+  border-color: rgb(23, 50, 224);
+  background: rgba(23, 50, 224, 0.05);
   transform: scale(1.02);
-  box-shadow: 0 0 20px rgba(41, 50, 225, 0.2);
+  box-shadow: 0 0 20px rgba(23, 50, 224, 0.2);
 }
 
 .upload-zone.dragging .upload-container,
@@ -407,7 +407,7 @@ header p {
   left: 50%;
   transform: translate(-50%, -50%);
   font-size: 1.2em;
-  color: #2932E1;
+  color: rgb(23, 50, 224);
   background: rgba(255, 255, 255, 0.95);
   padding: 10px 20px;
   border-radius: 4px;
@@ -422,7 +422,7 @@ header p {
   left: 50%;
   transform: translate(-50%, -50%);
   font-size: 1.2em;
-  color: #2932E1;
+  color: rgb(23, 50, 224);
   background: rgba(255, 255, 255, 0.95);
   padding: 10px 20px;
   border-radius: 4px;
@@ -451,7 +451,7 @@ header p {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(41, 50, 225, 0.1);
+  background: rgba(23, 50, 224, 0.1);
   z-index: 1000;
   pointer-events: none;
 }
@@ -467,7 +467,7 @@ header p {
   left: 50%;
   transform: translate(-50%, -50%);
   font-size: 1.5em;
-  color: #2932E1;
+  color: rgb(23, 50, 224);
   background: rgba(255, 255, 255, 0.9);
   padding: 15px 30px;
   border-radius: 8px;
@@ -553,27 +553,27 @@ main.has-content {
   border-radius: 4px;
 }
 .result-container::-webkit-scrollbar-thumb {
-  background: #2932E1;
+  background: rgb(23, 50, 224);
   border-radius: 4px;
   transition: all 0.3s ease;
 }
 .result-container::-webkit-scrollbar-thumb:hover {
-  background: #1890FF;
+  background: rgb(1, 155, 255);
 }
 
 .url-button {
   background: transparent;
-  color: #2932E1;
+  color: rgb(23, 50, 224);
   padding: 1rem 2rem;
   border-radius: 99px;
   font-size: 1.1rem;
   font-weight: 500;
-  border: 2px solid #2932E1;
+  border: 2px solid rgb(23, 50, 224);
   transition: all 0.3s ease;
   cursor: pointer;
 }
 .url-button:hover {
-  background: rgba(41, 50, 225, 0.1);
+  background: rgba(23, 50, 224, 0.1);
   transform: translateY(-2px);
 }
 
@@ -588,7 +588,7 @@ main.has-content {
 .url-input {
   flex: 1;
   padding: 0.8rem 1rem;
-  border: 2px solid rgba(41, 50, 225, 0.2);
+  border: 2px solid rgba(23, 50, 224, 0.2);
   border-radius: 12px;
   font-size: 1rem;
   transition: all 0.3s ease;
@@ -597,13 +597,13 @@ main.has-content {
 }
 .url-input:focus {
   outline: none;
-  border-color: #2932E1;
-  box-shadow: 0 0 0 3px rgba(41, 50, 225, 0.1);
+  border-color: rgb(23, 50, 224);
+  box-shadow: 0 0 0 3px rgba(23, 50, 224, 0.1);
 }
 
 .url-submit {
   padding: 0.8rem 1.5rem;
-  background: #2932E1;
+  background: rgb(23, 50, 224);
   color: white;
   border: none;
   border-radius: 12px;
@@ -614,7 +614,7 @@ main.has-content {
   flex-shrink: 0;
 }
 .url-submit:hover {
-  background: #1890FF;
+  background: rgb(1, 155, 255);
   transform: translateY(-2px);
 }
 
@@ -646,7 +646,7 @@ main.has-content {
 }
 
 .nav-button {
-  background: #2932E1;
+  background: rgb(23, 50, 224);
   color: white;
   border: none;
   border-radius: 50%;
@@ -667,8 +667,8 @@ main.has-content {
 }
 .nav-button:not(:disabled):hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(41, 50, 225, 0.3);
-  background: #1890FF;
+  box-shadow: 0 5px 15px rgba(23, 50, 224, 0.3);
+  background: rgb(1, 155, 255);
 }
 
 .image-counter {
@@ -793,7 +793,7 @@ main.has-content {
 }
 
 .copy-button {
-  background: #2932E1;
+  background: rgb(23, 50, 224);
   color: white;
   border: none;
   border-radius: 6px;
@@ -807,7 +807,7 @@ main.has-content {
   white-space: nowrap;
 }
 .copy-button:hover {
-  background: #1890FF;
+  background: rgb(1, 155, 255);
   transform: translateY(-1px);
 }
 .copy-button.copied {
@@ -827,7 +827,7 @@ main.has-content {
   transition: all 0.3s ease;
   width: 32px; height: 32px;
 }
-.github-link:hover svg { fill: #2932E1; opacity: 1; }
+.github-link:hover svg { fill: rgb(23, 50, 224); opacity: 1; }
 
 @media (max-width: 768px) {
   .github-link { top: 0.5rem; right: 0.5rem; }
