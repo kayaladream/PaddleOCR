@@ -559,7 +559,7 @@ main.has-content {
   transition: all 0.3s ease;
 }
 .result-container::-webkit-scrollbar-thumb:hover {
-  background: rgb(1, 155, 255);
+  background: #2A4CF0;
 }
 
 .url-button {
@@ -615,7 +615,7 @@ main.has-content {
   flex-shrink: 0;
 }
 .url-submit:hover {
-  background: rgb(1, 155, 255);
+  background: #2A4CF0;
   transform: translateY(-2px);
 }
 
@@ -669,7 +669,7 @@ main.has-content {
 .nav-button:not(:disabled):hover {
   transform: translateY(-2px);
   box-shadow: 0 5px 15px rgba(23, 50, 224, 0.3);
-  background: rgb(1, 155, 255);
+  background: #2A4CF0;
 }
 
 .image-counter {
@@ -808,8 +808,9 @@ main.has-content {
   white-space: nowrap;
 }
 .copy-button:hover {
-  background: rgb(1, 155, 255);
+  background: #2A4CF0; 
   transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(18, 51, 224, 0.3); 
 }
 .copy-button.copied {
   background: #20C997;
