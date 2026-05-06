@@ -436,7 +436,16 @@ function App() {
         <p>
           <b>基于PaddleOCR-VL API的智能文字识别解决方案，可精准识别多语言文字、表格等。</b>
           <br />
-          识别出的表格需在编辑框内手动复制，粘贴至 Excel 即可保留格式使用。
+          识别出的表格复制至 Excel 即可保留格式使用，公式源码可点击
+          <a 
+            href="https://stackedit.io/app#" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ color: '#1233E0', textDecoration: 'underline', fontWeight: '500', marginLeft: '4px', marginRight: '4px' }}
+          >
+            这里
+          </a>
+          预览渲染效果。
         </p>
       </header>
 
