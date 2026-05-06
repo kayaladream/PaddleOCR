@@ -1,6 +1,6 @@
 {
   "short_name": "PaddleOCR",
-  "name": "PaddleOCR 智能识别",
+  "name": "PaddleOCR - 文档解析与智能文字识别",
   "icons": [
     {
       "src": "favicon.ico",
