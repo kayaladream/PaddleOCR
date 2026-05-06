@@ -1,465 +1,947 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import 'katex/dist/katex.min.css';
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import { marked } from 'marked';
-import TurndownService from 'turndown';
-import DOMPurify from 'dompurify';
-import './App.css';
+/* ========== 原布局完全保留，仅替换颜色 ========== */
 
-// 预处理 Markdown 文本，使其更适合 react-markdown 渲染
-const preprocessText = (text) => {
-  if (!text) return '';
-  // 简单清理，保留原格式
-  let cleaned = text
-    .replace(/\\\\\(/g, '$')
-    .replace(/\\\\\)/g, '$')
-    .replace(/\\\\\[/g, '$$')
-    .replace(/\\\\\]/g, '$$')
-    .replace(/\n{3,}/g, '\n\n');
-  return cleaned.trim();
-};
-
-// 将文件转换为 base64
-const fileToBase64 = (file) => {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      resolve(reader.result.split(',')[1]);
-    };
-    reader.readAsDataURL(file);
-  });
-};
-
-const turndownService = new TurndownService({
-  headingStyle: 'atx',
-  hr: '---',
-  bulletListMarker: '*',
-  codeBlockStyle: 'fenced',
-  emDelimiter: '*',
-  strongDelimiter: '**',
-});
-turndownService.keep(['table', 'thead', 'tbody', 'tr', 'th', 'td']);
-turndownService.addRule('katex', {
-  filter: (node) => node.nodeName === 'SPAN' && (node.classList.contains('katex-display') || node.classList.contains('katex')),
-  replacement: (content, node) => {
-    const latex = node.querySelector('annotation[encoding="application/x-tex"]');
-    if (latex) {
-      const formula = latex.textContent;
-      return node.classList.contains('katex-display') ? `\n\n$$${formula}$$\n\n` : `$${formula}$`;
-    }
-    return node.outerHTML;
-  }
-});
-
-function App() {
-  const [images, setImages] = useState([]);
-  const [results, setResults] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
-  const dropZoneRef = useRef(null);
-  const [showUrlInput, setShowUrlInput] = useState(false);
-  const [imageUrl, setImageUrl] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [streamingText, setStreamingText] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [isDraggingModal, setIsDraggingModal] = useState(false);
-  const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
-  const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
-  const [modalScale, setModalScale] = useState(1);
-  const [editText, setEditText] = useState('');
-  const editDivRef = useRef(null);
-
-  // 打字机流式效果
-  const typewriterEffect = useCallback((fullText, index) => {
-    let pos = 0;
-    const speed = 15; // 每字符间隔毫秒
-    const timer = setInterval(() => {
-      if (pos < fullText.length) {
-        const current = fullText.substring(0, pos + 1);
-        setStreamingText(current);
-        setResults(prev => {
-          const updated = [...prev];
-          updated[index] = current;
-          return updated;
-        });
-        pos++;
-      } else {
-        clearInterval(timer);
-        setIsStreaming(false);
-      }
-    }, speed);
-    return () => clearInterval(timer);
-  }, []);
-
-  // 处理单个图片
-  const handleFile = useCallback(async (file, index) => {
-    if (!file.type.startsWith('image/')) return;
-
-    setIsStreaming(true);
-    setStreamingText('');
-    setResults(prev => {
-      const newResults = [...prev];
-      newResults[index] = '...';
-      return newResults;
-    });
-
-    try {
-      const imageData = await fileToBase64(file);
-      const response = await fetch('/api/recognize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageData, mimeType: file.type }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: '请求失败' }));
-        throw new Error(err.error || '服务异常');
-      }
-
-      const data = await response.json();
-      const finalText = preprocessText(data.text || '');
-      
-      // 启动打字机效果
-      typewriterEffect(finalText, index);
-    } catch (error) {
-      console.error('识别失败:', error);
-      const errMsg = `> ⚠️ **系统提示：图片处理失败**\n>\n> ${error.message}`;
-      setResults(prev => {
-        const updated = [...prev];
-        updated[index] = errMsg;
-        return updated;
-      });
-      setStreamingText(errMsg);
-      setIsStreaming(false);
-    }
-  }, [typewriterEffect]);
-
-  // 并发处理多图
- const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
-    const queue = [...items.entries()];
-    const workers = new Array(maxConcurrent).fill().map(async () => {
-      while (queue.length > 0) {
-        const [realIdx, item] = queue.shift();
-        await processor(item, realIdx).catch(err => console.error(err));
-      }
-    });
-    await Promise.all(workers);
-  };
-
-  // 上传图片（文件选择）
-  const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
-    setIsLoading(true);
-    try {
-      const startIdx = images.length;
-      const urls = files.map(f => URL.createObjectURL(f));
-      setImages(prev => [...prev, ...urls]);
-      setResults(prev => [...prev, ...new Array(files.length).fill('')]);
-      setCurrentIndex(startIdx);
-      await concurrentProcess(files, (file, fileIdx) => handleFile(file, startIdx + fileIdx), 2);
-    } catch (err) {
-      alert('处理上传文件出错');
-    } finally {
-      setIsLoading(false);
-      if (e.target) e.target.value = null;
-    }
-  };
-
-  // 前后切换
-  const handlePrevImage = () => {
-    if (currentIndex > 0 && !isLoading && !isStreaming) setCurrentIndex(currentIndex - 1);
-  };
-  const handleNextImage = () => {
-    if (currentIndex < images.length - 1 && !isLoading && !isStreaming) setCurrentIndex(currentIndex + 1);
-  };
-
-  // 拖拽逻辑
-  useEffect(() => {
-    const dragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer?.types.includes('Files')) setIsDraggingGlobal(true); };
-    const dragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
-    const dragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!e.relatedTarget || e.relatedTarget === document.documentElement) { setIsDraggingGlobal(false); setIsDragging(false); } };
-    const drop = (e) => { e.preventDefault(); e.stopPropagation(); if (dropZoneRef.current && !dropZoneRef.current.contains(e.target)) { setIsDraggingGlobal(false); setIsDragging(false); } };
-    window.addEventListener('dragenter', dragEnter);
-    window.addEventListener('dragover', dragOver);
-    window.addEventListener('dragleave', dragLeave);
-    window.addEventListener('drop', drop);
-    return () => {
-      window.removeEventListener('dragenter', dragEnter);
-      window.removeEventListener('dragover', dragOver);
-      window.removeEventListener('dragleave', dragLeave);
-      window.removeEventListener('drop', drop);
-    };
-  }, []);
-
-  const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.types.includes('Files')) setIsDragging(true); };
-  const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
-  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!dropZoneRef.current.contains(e.relatedTarget)) setIsDragging(false); };
-  const handleDrop = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    setIsDraggingGlobal(false);
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-    if (!files.length) {
-      const items = Array.from(e.dataTransfer.items);
-      const urls = await Promise.all(items.filter(i => i.kind === 'string' && (i.type === 'text/uri-list' || i.type === 'text/plain')).map(i => new Promise(res => i.getAsString(res))));
-      const imgUrl = urls.find(u => u?.match(/\.(jpg|jpeg|png|gif|webp|avif)(\?.*)?$/i));
-      if (imgUrl) { setImageUrl(imgUrl); setShowUrlInput(true); }
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const startIdx = images.length;
-      const urls = files.map(f => URL.createObjectURL(f));
-      setImages(prev => [...prev, ...urls]);
-      setResults(prev => [...prev, ...new Array(files.length).fill('')]);
-      setCurrentIndex(startIdx);
-      await concurrentProcess(files, (file, fileIdx) => handleFile(file, startIdx + fileIdx), 2);
-    } catch (err) {
-      alert('拖放处理失败');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // URL 上传
-  const handleUrlSubmit = async (e) => {
-    e.preventDefault();
-    if (!imageUrl) return;
-    setIsLoading(true);
-    setShowUrlInput(false);
-    try {
-      let blob;
-      try {
-        const res = await fetch(imageUrl, { signal: AbortSignal.timeout(10000) });
-        if (!res.ok) throw new Error();
-        blob = await res.blob();
-      } catch {
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
-        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
-        if (!res.ok) throw new Error();
-        blob = await res.blob();
-      }
-      if (!blob.type.startsWith('image/')) throw new Error('非图片文件');
-      const file = new File([blob], 'url_image.jpg', { type: blob.type });
-      const url = URL.createObjectURL(file);
-      const newIndex = images.length;
-      setImages(prev => [...prev, url]);
-      setResults(prev => [...prev, '']);
-      setCurrentIndex(newIndex);
-      await handleFile(file, newIndex);
-      setImageUrl('');
-    } catch (err) {
-      alert(`无法加载图片: ${err.message}`);
-      setShowUrlInput(true);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 图片放大
-  const handleImageClick = () => { if (images[currentIndex]) { setModalPosition({ x: 0, y: 0 }); setModalScale(1); setShowModal(true); } };
-  const handleCloseModal = () => setShowModal(false);
-
-  // 复制内容
-  const handleCopyText = () => {
-    if (!editText || isStreaming) return;
-    const plain = editText.replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(\*|_)(.*?)\1/g, '$2');
-    navigator.clipboard.writeText(plain.trim()).then(() => {
-      const btn = document.querySelector('.copy-button');
-      if (btn) { btn.textContent = '已复制'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = '复制内容'; btn.classList.remove('copied'); }, 1500); }
-    }).catch(() => alert('复制失败'));
-  };
-
-  // 编辑器同步
-  useEffect(() => {
-    if (isStreaming) return;
-    const md = results[currentIndex] || '';
-    setEditText(md);
-    if (editDivRef.current) {
-      const html = marked.parse(md, { breaks: true });
-      editDivRef.current.innerHTML = DOMPurify.sanitize(html);
-    }
-  }, [currentIndex, results, isStreaming]);
-
-  const handleInput = (e) => {
-    const html = e.currentTarget.innerHTML;
-    const newMd = turndownService.turndown(html);
-    setEditText(newMd);
-    setResults(prev => { const u = [...prev]; u[currentIndex] = newMd; return u; });
-  };
-
-  const handleManualCopy = (e) => {
-    e.preventDefault();
-    const sel = window.getSelection().toString();
-    const plainText = sel.replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(\*|_)(.*?)\1/g, '$2');
-    e.clipboardData.setData('text/plain', plainText);
-  };
-
-  // 全局粘贴
-  useEffect(() => {
-    const pasteHandler = async (e) => {
-      if (editDivRef.current?.contains(e.target) || showModal) return;
-      e.preventDefault();
-      const items = Array.from(e.clipboardData.items);
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          const file = item.getAsFile();
-          if (file) {
-            setIsLoading(true);
-            const url = URL.createObjectURL(file);
-            const newIdx = images.length;
-            setImages(prev => [...prev, url]);
-            setResults(prev => [...prev, '']);
-            setCurrentIndex(newIdx);
-            await handleFile(file, newIdx);
-            setIsLoading(false);
-          }
-        } else if (item.type === 'text/plain') {
-          item.getAsString((text) => { if (text.match(/https?:\/\//i)) { setImageUrl(text); setShowUrlInput(true); } });
-        }
-      }
-    };
-    document.addEventListener('paste', pasteHandler);
-    return () => document.removeEventListener('paste', pasteHandler);
-  }, [images.length, handleFile, showModal]);
-
-  const modalMouseDown = (e) => {
-    if (e.target.classList.contains('modal-close') || e.button !== 0) return;
-    const clientX = e.touches?.[0]?.clientX ?? e.clientX;
-    const clientY = e.touches?.[0]?.clientY ?? e.clientY;
-    setIsDraggingModal(true);
-    setModalOffset({ x: clientX - modalPosition.x, y: clientY - modalPosition.y });
-  };
-  const modalWheel = (e) => {
-    e.preventDefault();
-    const delta = -e.deltaY * 0.0005 * modalScale;
-    setModalScale(prev => Math.max(0.1, Math.min(10, prev + delta)));
-  };
-  useEffect(() => {
-    const move = (e) => {
-      if (!isDraggingModal) return;
-      const clientX = e.touches?.[0]?.clientX ?? e.clientX;
-      const clientY = e.touches?.[0]?.clientY ?? e.clientY;
-      setModalPosition({ x: clientX - modalOffset.x, y: clientY - modalOffset.y });
-    };
-    const end = () => setIsDraggingModal(false);
-    if (isDraggingModal) {
-      window.addEventListener('mousemove', move);
-      window.addEventListener('mouseup', end);
-      window.addEventListener('touchmove', move, { passive: false });
-      window.addEventListener('touchend', end);
-    }
-    return () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', end);
-      window.removeEventListener('touchmove', move);
-      window.removeEventListener('touchend', end);
-    };
-  }, [isDraggingModal, modalOffset]);
-
-  return (
-    <div className="app">
-      <header>
-        <a href="https://github.com/你的仓库" target="_blank" rel="noopener noreferrer" className="github-link" title="查看源码">
-          <svg height="32" viewBox="0 0 16 16" width="32"><path fillRule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
-        </a>
-        <h1>PaddleOCR - 智能文档识别</h1>
-        <p>
-          <b>基于 PaddleOCR-VL 的文档解析系统，精准识别文字、表格，输出 Markdown。</b>
-          <br />
-          识别结果可在编辑框内修改，表格可复制到 Excel。
-        </p>
-      </header>
-
-      <main className={images.length > 0 ? 'has-content' : ''}>
-        <div className={`upload-section ${images.length > 0 ? 'with-image' : ''}`}>
-          <div ref={dropZoneRef} className={`upload-zone ${isDragging ? 'dragging' : ''}`}
-               onDragEnter={handleDragEnter} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
-            <div className="upload-container">
-              <label className="upload-button" htmlFor="file-input">{images.length > 0 ? '添加图片' : '上传图片'}</label>
-              <input id="file-input" type="file" accept="image/*" onChange={handleImageUpload} multiple hidden />
-              <button type="button" className="url-button" onClick={() => setShowUrlInput(!showUrlInput)}>{showUrlInput ? '取消' : '使用链接上传'}</button>
-            </div>
-            {showUrlInput && (
-              <form onSubmit={handleUrlSubmit} className="url-form">
-                <input type="url" value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="粘贴图片链接 (URL)" className="url-input" required />
-                <button type="submit" className="url-submit">确认</button>
-              </form>
-            )}
-            {!images.length && !isDragging && !showUrlInput && <p className="upload-hint">或将图片拖放到此处 / 粘贴图片</p>}
-            {isDragging && <div className="dragging-overlay-text">松开即可上传图片</div>}
-          </div>
-          {isDraggingGlobal && <div className="drag-overlay active"></div>}
-          {images.length > 0 && (
-            <div className="images-preview">
-              <div className="image-navigation">
-                <button onClick={handlePrevImage} disabled={currentIndex === 0} className="nav-button">←</button>
-                <span className="image-counter">{currentIndex + 1} / {images.length}</span>
-                <button onClick={handleNextImage} disabled={currentIndex === images.length - 1} className="nav-button">→</button>
-              </div>
-              <div className={`image-preview ${isLoading && !results[currentIndex] ? 'loading' : ''}`}>
-                <img key={images[currentIndex]} src={images[currentIndex]} alt="预览" onClick={handleImageClick} style={{ cursor: 'zoom-in' }} />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {(images.length > 0 || isLoading || isStreaming) && (
-          <div className="result-section">
-            <div className="result-container">
-              {isLoading && !isStreaming && <div className="loading result-loading">等待识别...</div>}
-              {isStreaming && (
-                <div className="result-text">
-                  <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...)</span></div>
-                  <div className="gradient-text">
-                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}
-                      components={{
-                        table: ({node, ...props}) => (<div style={{overflowX:'auto'}}><table className="markdown-table" {...props} /></div>),
-                        th: ({node, ...props}) => <th className="markdown-th" {...props} />,
-                        td: ({node, ...props}) => <td className="markdown-td" {...props} />,
-                      }}>
-                      {streamingText}
-                    </ReactMarkdown>
-                  </div>
-                </div>
-              )}
-              {!isStreaming && results[currentIndex] != null && (
-                <div className="result-text editing-area">
-                  <div className="result-header">
-                    <span>编辑第 {currentIndex + 1} 张图片的结果</span>
-                    <button className="copy-button" onClick={handleCopyText}>复制内容</button>
-                  </div>
-                  <div ref={editDivRef} contentEditable={true} className="edit-content-editable" onInput={handleInput} onCopy={handleManualCopy}
-                       suppressContentEditableWarning={true} aria-label={`编辑识别结果 ${currentIndex + 1}`} spellCheck="false" />
-                </div>
-              )}
-              {!isLoading && !isStreaming && results[currentIndex] == null && images.length > 0 && (
-                <div className="result-placeholder">
-                  <span style={{fontWeight:'bold'}}>⚠️ 系统提示</span><br /><br />当前图片状态异常，暂无识别结果。
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </main>
-
-      {showModal && images[currentIndex] && (
-        <div className="modal-overlay">
-          <div className="modal-content" onMouseDown={modalMouseDown} onWheel={modalWheel} onTouchStart={modalMouseDown}
-               style={{ transform: `translate(${modalPosition.x}px, ${modalPosition.y}px) scale(${modalScale})`, cursor: isDraggingModal ? 'grabbing' : 'grab' }}>
-            <img src={images[currentIndex]} alt="放大预览" draggable="false" />
-            <button className="modal-close" onClick={handleCloseModal} onMouseDown={e => e.stopPropagation()}>×</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+@keyframes gradientMove {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
 }
 
-export default App;
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes backgroundShift {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+@keyframes smoothReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+    background-position: 0% 50%;
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  85% {
+    background-position: 100% 50%;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+  95% {
+    color: rgba(29, 29, 31, 0);
+    -webkit-text-fill-color: rgba(29, 29, 31, 0);
+    background: linear-gradient(90deg, #0e9c6e, #b8860b, #daa520); /* 新渐变 */
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+  100% {
+    opacity: 1;
+    color: #1d1d1f;
+    -webkit-text-fill-color: #1d1d1f;
+    background: none;
+  }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+body {
+  background: linear-gradient(135deg, #f7f9f5 0%, #ffffff 100%); /* 原 #f5f7fa → #f7f9f5 */
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(14, 156, 110, 0.06) 0%, transparent 50%),    /* 原 rgba(0,113,227,0.05) */
+    radial-gradient(circle at 100% 0%, rgba(184, 134, 11, 0.06) 0%, transparent 50%),   /* 原 rgba(98,0,255,0.05) */
+    radial-gradient(circle at 100% 100%, rgba(218, 165, 32, 0.06) 0%, transparent 50%),  /* 原 rgba(255,44,171,0.05) */
+    radial-gradient(circle at 0% 100%, rgba(14, 156, 110, 0.06) 0%, transparent 50%);     /* 原 rgba(0,113,227,0.05) */
+  z-index: -1;
+  animation: backgroundShift 15s ease-in-out infinite alternate;
+}
+
+.app {
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 3rem 2rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  position: relative;
+  z-index: 1;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 1rem;
+  padding: 0rem;
+  position: relative;
+}
+
+header h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #0e9c6e, #b8860b); /* 原 #0071e3, #6200ff */
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.5px;
+}
+
+header p {
+  font-size: 0.8rem;
+  color: #86868b;
+  font-weight: 400;
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+.upload-container {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.upload-button {
+  background: linear-gradient(135deg, #0e9c6e, #b8860b); /* 原 #0071e3, #6200ff */
+  color: white;
+  padding: 1rem 2.5rem;
+  border-radius: 99px;
+  font-size: 1.1rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 5px 15px rgba(14, 156, 110, 0.2); /* 原 rgba(0,113,227,0.2) */
+  border: none;
+  cursor: pointer;
+  display: inline-block;
+  text-align: center;
+}
+
+.upload-button::after {
+  display: none;
+}
+
+.upload-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(14, 156, 110, 0.3); /* 原 rgba(0,113,227,0.3) */
+}
+
+.image-preview {
+  position: relative;
+  aspect-ratio: 4/3;
+  margin-top: 1rem;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  background: #f0f0f0;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fafafa;
+  border-radius: 12px;
+  z-index: 1;
+  display: block;
+}
+
+.image-preview.load-error::before {
+  content: '图片加载失败';
+  color: #dc3545;
+  font-weight: 500;
+  z-index: 0;
+}
+
+.image-preview:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+}
+
+.image-preview.loading .loading-overlay {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(14, 156, 110, 0.08),    /* 原 rgba(0,113,227,0.08) */
+    rgba(184, 134, 11, 0.08),    /* 原 rgba(98,0,255,0.08) */
+    rgba(218, 165, 32, 0.08),    /* 原 rgba(255,44,171,0.08) */
+    rgba(14, 156, 110, 0.08)
+  );
+  background-size: 300% 100%;
+  animation: gradientMove 3s linear infinite;
+  border-radius: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0e9c6e;               /* 原 #0071e3 */
+  font-weight: 500;
+  font-size: 1.1rem;
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(
+    90deg,
+    rgba(14, 156, 110, 0.08),
+    rgba(184, 134, 11, 0.08),
+    rgba(218, 165, 32, 0.08),
+    rgba(14, 156, 110, 0.08)
+  );
+  background-size: 300% 100%;
+  animation: gradientMove 3s linear infinite;
+  border-radius: 12px;
+  z-index: 2;
+  color: #0e9c6e;
+  font-weight: 500;
+  font-size: 1.1rem;
+}
+
+.upload-zone {
+  position: relative;
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.9);
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.upload-zone.dragging {
+  border-color: #2ecc71;                /* 原 #4CAF50 */
+  background: rgba(46, 204, 113, 0.05); /* 原 rgba(76,175,80,0.05) */
+  transform: scale(1.02);
+  box-shadow: 0 0 20px rgba(46, 204, 113, 0.2); /* 原 rgba(76,175,80,0.2) */
+}
+
+.upload-zone.dragging .upload-container,
+.upload-zone.dragging .upload-hint {
+  opacity: 0.5;
+}
+
+.upload-zone.dragging::after {
+  content: '拖拽到此处上传图片';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.2em;
+  color: #2ecc71;                    /* 原 #4CAF50 */
+  background: rgba(255, 255, 255, 0.95);
+  padding: 10px 20px;
+  border-radius: 4px;
+  z-index: 10;
+  animation: fadeIn 0.3s ease;
+  pointer-events: none;
+}
+
+.dragging-overlay-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.2em;
+  color: #2ecc71;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 10px 20px;
+  border-radius: 4px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.upload-container {
+  transition: all 0.3s ease;
+}
+
+.upload-hint {
+  margin-top: 1rem;
+  color: #86868b;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  user-select: none;
+  text-align: center;
+  width: 100%;
+}
+
+.drag-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(46, 204, 113, 0.1); /* 原 rgba(76,175,80,0.1) */
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.drag-overlay.active {
+  display: block;
+}
+
+.drag-overlay::after {
+  content: '将图片拖到下方框内';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.5em;
+  color: #2ecc71;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 15px 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+main {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+main.has-content {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 2.5rem;
+}
+
+.upload-section {
+  width: 100%;
+  max-width: 600px;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.upload-section.with-image {
+  width: 50%;
+  max-width: 600px;
+}
+
+.result-section {
+  flex: 1;
+  min-width: 0;
+  opacity: 0;
+  animation: fadeIn 0.5s ease-out forwards;
+  animation-delay: 0.2s;
+  max-height: calc(80vh - 90px);
+  position: sticky;
+  top: 2rem;
+  align-self: stretch;
+}
+
+.result-container {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 20px;
+  padding: 2rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(14, 156, 110, 0.1); /* 原 rgba(0,113,227,0.1) */
+  transition: none;
+  overflow-y: auto;
+  max-height: 100%;
+  height: auto;
+  scroll-behavior: smooth;
+  display: flex;             /* 恢复原高度自适应 */
+  flex-direction: column;    /* 恢复原高度自适应 */
+}
+
+.result-container:hover {
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
+}
+
+.loading.result-loading {
+  color: #0e9c6e;  /* 原 #0071e3 */
+  font-weight: 500;
+  font-size: 1.1rem;
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.result-text {
+  line-height: 1.6;
+  color: #1d1d1f;
+  width: 100%;
+  padding: 0 0 1rem 0;
+  transition: none;
+}
+
+.result-text .result-header {
+  min-height: 38px;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(14, 156, 110, 0.1); /* 原 rgba(0,113,227,0.1) */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.result-text table,
+.result-text ul,
+.result-text ol {
+  width: 100%;
+  color: #1d1d1f;
+  -webkit-text-fill-color: #1d1d1f;
+  margin: 1rem 0;
+  opacity: 0;
+  animation: fadeIn 0.5s ease-out forwards;
+  animation-delay: 0.3s;
+}
+
+.result-text table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.result-text th,
+.result-text td {
+  border: 1px solid #e0e0e0;
+  padding: 12px 16px;
+  text-align: left;
+  color: #1d1d1f;
+  -webkit-text-fill-color: #1d1d1f;
+  word-wrap: break-word;
+  vertical-align: top;
+  opacity: 0;
+  animation: smoothReveal 1s ease-out forwards;
+  animation-delay: calc(var(--index) * 50ms);
+}
+
+.result-text p {
+  margin: 1rem 0;
+  line-height: 1.8;
+}
+
+.gradient-text {
+  color: #1d1d1f;
+  position: relative;
+  min-height: 50px;
+  font-size: 1.1rem;
+  font-family: "微软雅黑", serif;
+}
+
+.gradient-text > div {
+  line-height: 1.6;
+}
+
+.gradient-text p,
+.gradient-text li,
+.gradient-text td,
+.gradient-text th {
+  opacity: 0;
+  animation: smoothReveal 1s ease-out forwards;
+  animation-delay: calc(var(--index) * 50ms);
+  background: linear-gradient(90deg, #0e9c6e, #b8860b, #daa520); /* 新渐变色 */
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  line-height: 1.8;
+  margin: 0.8rem 0;
+}
+
+.gradient-text table,
+.gradient-text ul,
+.gradient-text ol {
+  margin: 1rem 0;
+}
+
+.gradient-text table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.gradient-text th,
+.gradient-text td {
+  border: 1px solid #e0e0e0;
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.result-text tr:hover td {
+  background: rgba(14, 156, 110, 0.02); /* 原 rgba(0,113,227,0.02) */
+}
+
+.result-text table .gradient-text {
+  display: block;
+}
+
+.result-container::-webkit-scrollbar {
+  width: 8px;
+}
+.result-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+.result-container::-webkit-scrollbar-thumb {
+  background: #0e9c6e;  /* 原 #0071e3 */
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+.result-container::-webkit-scrollbar-thumb:hover {
+  background: #07885a;  /* 原 #005bb5 */
+}
+
+.url-button {
+  background: transparent;
+  color: #0e9c6e;  /* 原 #0071e3 */
+  padding: 1rem 2rem;
+  border-radius: 99px;
+  font-size: 1.1rem;
+  font-weight: 500;
+  border: 2px solid #0e9c6e;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+.url-button:hover {
+  background: rgba(14, 156, 110, 0.1); /* 原 rgba(0,113,227,0.1) */
+  transform: translateY(-2px);
+}
+
+.url-form {
+  width: 100%;
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.url-input {
+  flex: 1;
+  padding: 0.8rem 1rem;
+  border: 2px solid rgba(14, 156, 110, 0.2); /* 原 rgba(0,113,227,0.2) */
+  border-radius: 12px;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.9);
+  min-width: 0;
+}
+.url-input:focus {
+  outline: none;
+  border-color: #0e9c6e;
+  box-shadow: 0 0 0 3px rgba(14, 156, 110, 0.1); /* 原 rgba(0,113,227,0.1) */
+}
+
+.url-submit {
+  padding: 0.8rem 1.5rem;
+  background: #0e9c6e;  /* 原 #0071e3 */
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+.url-submit:hover {
+  background: #07885a;  /* 原 #005bb5 */
+  transform: translateY(-2px);
+}
+
+@media (max-width: 768px) {
+  .app {
+    padding: 2rem 1rem;
+  }
+  header h1 { font-size: 1.5rem; }
+  header p { font-size: 0.75rem; }
+  .upload-button, .url-button {
+    padding: 0.8rem 1.5rem;
+    font-size: 1rem;
+  }
+  .url-submit {
+    padding: 0.8rem 1rem;
+  }
+}
+
+.images-preview {
+  width: 100%;
+}
+
+.image-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.nav-button {
+  background: #0e9c6e;  /* 原 #0071e3 */
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+.nav-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.nav-button:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(14, 156, 110, 0.3); /* 原 rgba(0,113,227,0.3) */
+}
+
+.image-counter {
+  font-size: 0.9rem;
+  color: #86868b;
+  min-width: 60px;
+  text-align: center;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  animation: fadeIn 0.3s ease-out;
+  pointer-events: none;
+}
+
+.modal-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  background: transparent;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  animation: scaleIn 0.3s ease-out;
+  cursor: grab;
+  overflow: visible;
+  pointer-events: auto;
+}
+.modal-content img {
+  display: block;
+  max-width: 100%;
+  max-height: 90vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.modal-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  transform: translate(50%, -50%);
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: rgba(60, 60, 60, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  font-size: 24px;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+  z-index: 10;
+  pointer-events: auto;
+}
+.modal-close:hover {
+  background: rgba(30, 30, 30, 0.9);
+  transform: translate(50%, -50%) scale(1.1);
+  color: #fff;
+}
+
+.image-preview img[src] {
+  cursor: zoom-in;
+}
+
+.katex {
+  color: #1d1d1f !important;
+  pointer-events: none;
+}
+
+.latex-inline {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 0.2em;
+  opacity: 0;
+  animation: smoothReveal 1s ease-out forwards;
+  animation-delay: calc(var(--index) * 50ms);
+}
+.latex-block {
+  margin: 1em 0;
+  overflow-x: auto;
+  max-width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 0.5em 0;
+  opacity: 0;
+  animation: smoothReveal 1s ease-out forwards;
+  animation-delay: calc(var(--index) * 50ms);
+}
+.latex-block .katex-display {
+  margin: 0;
+}
+.katex {
+  font-size: 1.1em;
+  line-height: 1.2;
+  text-rendering: optimizeLegibility;
+  animation: none !important;
+}
+.katex-display > .katex {
+  display: inline-block !important;
+  text-align: center;
+}
+.katex-html {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+@media (max-width: 768px) {
+  .katex { font-size: 1em; }
+  .latex-block { max-width: 100%; overflow-x: auto; }
+}
+
+.copy-button {
+  background: #0e9c6e;  /* 原 #0071e3 */
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.copy-button:hover {
+  background: #07885a;  /* 原 #005bb5 */
+  transform: translateY(-1px);
+}
+.copy-button.copied {
+  background: #27ae60;  /* 原 #34c759 */
+}
+
+.github-link {
+  position: fixed;
+  top: 0.5rem; right: 0.5rem;
+  z-index: 1000;
+  transition: transform 0.3s ease;
+}
+.github-link:hover { transform: scale(1.1); }
+.github-link svg {
+  fill: #1d1d1f;
+  opacity: 0.8;
+  transition: all 0.3s ease;
+  width: 32px; height: 32px;
+}
+.github-link:hover svg { fill: #0e9c6e; opacity: 1; }  /* 原 #0071e3 */
+
+@media (max-width: 768px) {
+  .github-link { top: 0.5rem; right: 0.5rem; }
+  .github-link svg { width: 28px; height: 28px; }
+}
+
+.edit-button, .save-button, .cancel-button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  white-space: nowrap;
+}
+.edit-button:hover, .save-button:hover, .cancel-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+}
+.edit-button { background: #ffc107; color: black; }
+.save-button { background: #28a745; color: white; }
+.cancel-button { background: #dc3545; color: white; }
+.editing-area .result-header div {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.editing-area .gradient-text p,
+.editing-area .gradient-text li,
+.editing-area .gradient-text td,
+.editing-area .gradient-text th {
+  animation: none !important;
+  opacity: 1 !important;
+  background: none !important;
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+.edit-content-editable {
+  width: 100%;
+  min-height: 400px;
+  max-height: calc(80vh - 150px);
+  overflow-y: auto;
+  font-size: 1.13rem;
+  font-family: "微软雅黑", serif;
+  line-height: 1.5;
+  border: 1px solid #ced4da;
+  border-radius: 8px;
+  padding: 15px;
+  box-sizing: border-box;
+  margin-top: 1rem;
+  background-color: #f8f9fa;
+  color: #212529;
+  cursor: text;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.edit-content-editable:focus {
+  border-color: #86b7fe;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.edit-content-editable strong {
+  font-weight: bold;
+}
+.edit-content-editable em {
+  font-style: italic;
+}
+.edit-content-editable p {
+  margin: 0 0 0em 0;
+}
+.edit-content-editable ul,
+.edit-content-editable ol {
+  padding-left: 2em;
+  margin: 0 0 1em 0;
+}
+.edit-content-editable li {
+  margin-bottom: 0.2em;
+}
+.edit-content-editable code {
+  background-color: rgba(27, 31, 35, 0.05);
+  padding: .2em .4em;
+  margin: 0;
+  font-size: 85%;
+  border-radius: 3px;
+}
+.edit-content-editable pre {
+  padding: 16px;
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  background-color: #f6f8fa;
+  border-radius: 3px;
+  margin: 0 0 1em 0;
+}
+.edit-content-editable pre code {
+  padding: 0;
+  margin: 0;
+  font-size: 100%;
+  background-color: transparent;
+  border-radius: 0;
+}
+.edit-content-editable blockquote {
+  padding: 0 1em;
+  color: #6a737d;
+  border-left: 0.25em solid #dfe2e5;
+  margin: 0 0 1em 0;
+}
+.edit-content-editable table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  width: auto;
+  border-spacing: 0;
+}
+.edit-content-editable th,
+.edit-content-editable td {
+  border: 1px solid #dfe2e5;
+  padding: 6px 13px;
+}
+.edit-content-editable .katex {
+  color: inherit !important;
+  pointer-events: auto;
+}
+
+.result-placeholder {
+  text-align: center;
+  color: #86868b;
+  padding: 2rem;
+  font-style: italic;
+}
+
+/* 响应式保留原版行为 */
+@media (max-width: 992px) {
+  main.has-content {
+    flex-direction: column;
+    align-items: center;
+  }
+  .upload-section.with-image {
+    width: 100%;
+    max-width: 600px;
+  }
+  .result-section {
+    max-height: 60vh;
+    position: relative;
+    top: 0;
+    width: 100%;
+    max-width: 600px;
+    margin-top: 2rem;
+  }
+}
