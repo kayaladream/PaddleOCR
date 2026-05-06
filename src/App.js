@@ -374,14 +374,18 @@ function App() {
   };
 
   useEffect(() => {
+  useEffect(() => {
     if (isStreaming) return;
     const md = results[currentIndex] || '';
     setEditText(md);
+    
     if (editDivRef.current) {
-      const html = marked.parse(md, { breaks: true });
-      editDivRef.current.innerHTML = DOMPurify.sanitize(html);
+      if (document.activeElement !== editDivRef.current) {
+        const html = marked.parse(md, { breaks: true });
+        editDivRef.current.innerHTML = DOMPurify.sanitize(html);
+      }
     }
-  }, [currentIndex, results, isStreaming]);
+  },[currentIndex, results, isStreaming]);
 
   const handleModalMouseDown = (e) => {
     if (e.target.classList.contains('modal-close') || e.button !== 0) return;
