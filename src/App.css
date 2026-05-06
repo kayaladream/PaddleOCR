@@ -32,7 +32,6 @@
   95% {
     color: rgba(29, 29, 31, 0);
     -webkit-text-fill-color: rgba(29, 29, 31, 0);
-    /* 采用你提供的精准RGB渐变色 */
     background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
     -webkit-background-clip: text;
     background-clip: text;
@@ -121,7 +120,7 @@ header p {
 }
 
 .upload-button {
-  /* 按钮背景精准渐变 */
+  /* 按钮背景 */
   background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
   background-size: 150% 100%;
   color: white;
