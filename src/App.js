@@ -1,947 +1,684 @@
-/* ========== 原布局完全保留，仅替换颜色 ========== */
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import 'katex/dist/katex.min.css';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import { marked } from 'marked';
+import TurndownService from 'turndown';
+import DOMPurify from 'dompurify';
+import './App.css';
 
-@keyframes gradientMove {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 300% 50%; }
-}
+// ====== 原有预处理函数（保留） ======
+const preprocessText = (text) => {
+  if (!text) return '';
+  const tables = [];
+  text = text.replace(/\|[^\n]+\|\n\|[-|\s]+\|(?:\n\|[^\n]+\|)+/g, (match) => {
+    tables.push(match);
+    return `__TABLE_${tables.length - 1}__`;
+  });
+  text = text.replace(/\\\\\(/g, '$');
+  text = text.replace(/\\\\\)/g, '$');
+  text = text.replace(/\\\\\[/g, '$$');
+  text = text.replace(/\\\\\]/g, '$$');
+  text = text.replace(/```[\s\S]*?```/g, (match) => {
+    const content = match.slice(3, -3).trim();
+    return content;
+  });
+  text = text.replace(/```\w*\n?/g, '');
+  text = text.replace(/(\d+)\.\s*\n+/g, '$1. ');
+  text = text.replace(/\n*\$\$\s*([\s\S]*?)\s*\$\$\n*/g, (match, formula) => {
+    return `\n\n$$${formula.trim()}$$\n\n`;
+  });
+  text = text.replace(/\$\s*(.*?)\s*\$/g, (match, formula) => {
+    return `$${formula.trim()}$`;
+  });
+  text = text.replace(/(\d+\.)\s*(\$\$[\s\S]*?\$\$)/g, '$1\n\n$2');
+  text = text.replace(/(\d+)\.\s+/g, '$1');
+  text = text.replace(/(\d+)\.\s+/g, '$1.');
+  text = text.replace(/(\d+)\)\s+/g, '$1)');
+  text = text.replace(/-\s+/g, '-');
+  text = text.replace(/\*\s+/g, '*');
+  text = text.replace(/\+\s+/g, '+');
+  text = text.replace(/>\s+/g, '>');
+  text = text.replace(/#\s+/g, '#');
+  text = text.replace(/\n{2,}/g, '\n\n');
+  text = text.replace(/__TABLE_(\d+)__/g, (match, index) => {
+    return `\n\n${tables[parseInt(index)]}\n\n`;
+  });
+  return text.trim();
+};
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+// ====== 新的辅助函数：File → base64 ======
+const fileToBase64 = (file) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+    reader.readAsDataURL(file);
+  });
+};
 
-@keyframes backgroundShift {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-  100% { transform: scale(1); }
-}
+// ====== Turndown 配置（完全原版） ======
+const turndownService = new TurndownService({
+    headingStyle: 'atx',
+    hr: '---',
+    bulletListMarker: '*',
+    codeBlockStyle: 'fenced',
+    emDelimiter: '*',
+    strongDelimiter: '**',
+});
+turndownService.keep(['table', 'thead', 'tbody', 'tr', 'th', 'td']);
+turndownService.addRule('katex', {
+    filter: function (node, options) {
+      return (
+        (node.nodeName === 'SPAN' && node.classList.contains('katex-display')) ||
+        (node.nodeName === 'SPAN' && node.classList.contains('katex'))
+      );
+    },
+    replacement: function (content, node, options) {
+      const latexSource = node.querySelector('annotation[encoding="application/x-tex"]');
+      if (latexSource) {
+        const formula = latexSource.textContent;
+        if (node.classList.contains('katex-display')) {
+          return `\n\n$$${formula}$$\n\n`;
+        } else {
+          return `$${formula}$`;
+        }
+      }
+      return node.outerHTML;
+    }
+});
 
-@keyframes smoothReveal {
-  0% {
-    opacity: 0;
-    transform: translateY(10px);
-    background-position: 0% 50%;
-  }
-  20% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  85% {
-    background-position: 100% 50%;
-    color: transparent;
-    -webkit-text-fill-color: transparent;
-  }
-  95% {
-    color: rgba(29, 29, 31, 0);
-    -webkit-text-fill-color: rgba(29, 29, 31, 0);
-    background: linear-gradient(90deg, #0e9c6e, #b8860b, #daa520); /* 新渐变 */
-    -webkit-background-clip: text;
-    background-clip: text;
-  }
-  100% {
-    opacity: 1;
-    color: #1d1d1f;
-    -webkit-text-fill-color: #1d1d1f;
-    background: none;
-  }
-}
+function App() {
+  const [images, setImages] = useState([]);
+  const [results, setResults] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
+  const resultRef = useRef(null);
+  const dropZoneRef = useRef(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [imageUrl, setImageUrl] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
 
-@keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.9); }
-  to { opacity: 1; transform: scale(1); }
-}
+  const [isDraggingModal, setIsDraggingModal] = useState(false);
+  const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
+  const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
+  const [modalScale, setModalScale] = useState(1);
 
-body {
-  background: linear-gradient(135deg, #f7f9f5 0%, #ffffff 100%); /* 原 #f5f7fa → #f7f9f5 */
-  min-height: 100vh;
-  position: relative;
-  overflow-x: hidden;
-}
+  const [editText, setEditText] = useState('');
+  const editDivRef = useRef(null);
 
-body::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background:
-    radial-gradient(circle at 0% 0%, rgba(14, 156, 110, 0.06) 0%, transparent 50%),    /* 原 rgba(0,113,227,0.05) */
-    radial-gradient(circle at 100% 0%, rgba(184, 134, 11, 0.06) 0%, transparent 50%),   /* 原 rgba(98,0,255,0.05) */
-    radial-gradient(circle at 100% 100%, rgba(218, 165, 32, 0.06) 0%, transparent 50%),  /* 原 rgba(255,44,171,0.05) */
-    radial-gradient(circle at 0% 100%, rgba(14, 156, 110, 0.06) 0%, transparent 50%);     /* 原 rgba(0,113,227,0.05) */
-  z-index: -1;
-  animation: backgroundShift 15s ease-in-out infinite alternate;
-}
+  // ====== 打字机流式效果 ======
+  const typewriterEffect = useCallback((fullText, index) => {
+    let pos = 0;
+    const speed = 15;
+    const timer = setInterval(() => {
+      if (pos < fullText.length) {
+        const current = fullText.substring(0, pos + 1);
+        setStreamingText(current);
+        setResults(prev => {
+          const updated = [...prev];
+          updated[index] = current;
+          return updated;
+        });
+        pos++;
+      } else {
+        clearInterval(timer);
+        setIsStreaming(false);
+      }
+    }, speed);
+    return () => clearInterval(timer);
+  }, []);
 
-.app {
-  max-width: 1300px;
-  margin: 0 auto;
-  padding: 3rem 2rem;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  position: relative;
-  z-index: 1;
-}
+  // ====== 处理单个图片（调用新后端） ======
+  const handleFile = useCallback(async (file, index) => {
+    if (!file.type.startsWith('image/')) return;
 
-header {
-  text-align: center;
-  margin-bottom: 1rem;
-  padding: 0rem;
-  position: relative;
-}
+    try {
+      setIsStreaming(true);
+      setStreamingText('');
+      setResults(prev => {
+        const newResults = [...prev];
+        newResults[index] = '';
+        return newResults;
+      });
 
-header h1 {
-  font-size: 1.8rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, #0e9c6e, #b8860b); /* 原 #0071e3, #6200ff */
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin-bottom: 0.5rem;
-  letter-spacing: -0.5px;
-}
+      const imageData = await fileToBase64(file);
+      const response = await fetch('/api/recognize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageData, mimeType: file.type }),
+      });
 
-header p {
-  font-size: 0.8rem;
-  color: #86868b;
-  font-weight: 400;
-  max-width: 600px;
-  margin: 0 auto;
-  line-height: 1.5;
-}
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: '请求失败' }));
+        throw new Error(errorData.error || '服务异常');
+      }
 
-.upload-container {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-  margin-bottom: 1rem;
-  flex-wrap: wrap;
-}
+      const data = await response.json();
+      const finalText = preprocessText(data.text || '');
+      typewriterEffect(finalText, index);
+    } catch (error) {
+      console.error('识别失败:', error);
+      const errMsg = `> ⚠️ **系统提示：图片处理失败**\n>\n> ${error.message}`;
+      setResults(prev => {
+        const updated = [...prev];
+        updated[index] = errMsg;
+        return updated;
+      });
+      setStreamingText(errMsg);
+      setIsStreaming(false);
+    }
+  }, [typewriterEffect]);
 
-.upload-button {
-  background: linear-gradient(135deg, #0e9c6e, #b8860b); /* 原 #0071e3, #6200ff */
-  color: white;
-  padding: 1rem 2.5rem;
-  border-radius: 99px;
-  font-size: 1.1rem;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  box-shadow: 0 5px 15px rgba(14, 156, 110, 0.2); /* 原 rgba(0,113,227,0.2) */
-  border: none;
-  cursor: pointer;
-  display: inline-block;
-  text-align: center;
-}
+  // ====== 并发处理（修复版，无 no-loop-func） ======
+  const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
+    const queue = [...items.entries()];
+    const workers = new Array(maxConcurrent).fill().map(async () => {
+      while (queue.length > 0) {
+        const [realIdx, item] = queue.shift();
+        await processor(item, realIdx).catch(err => console.error(err));
+      }
+    });
+    await Promise.all(workers);
+  };
 
-.upload-button::after {
-  display: none;
-}
+  // ====== 粘贴监听 ======
+  useEffect(() => {
+    const handlePaste = async (e) => {
+      if (editDivRef.current && editDivRef.current.contains(e.target)) {
+        return;
+      }
+      if (showModal) {
+        return;
+      }
 
-.upload-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(14, 156, 110, 0.3); /* 原 rgba(0,113,227,0.3) */
-}
+      e.preventDefault();
+      const items = Array.from(e.clipboardData.items);
 
-.image-preview {
-  position: relative;
-  aspect-ratio: 4/3;
-  margin-top: 1rem;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-  background: #f0f0f0;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            setIsLoading(true);
+            try {
+              const imageUrl = URL.createObjectURL(file);
+              const newIndex = images.length;
+              setImages(prev => [...prev, imageUrl]);
+              setResults(prev => [...prev, '']);
+              setCurrentIndex(newIndex);
+              await handleFile(file, newIndex);
+            } catch (error) {
+              console.error('处理粘贴的图片时出错:', error);
+              alert('处理粘贴的图片时发生错误。');
+            } finally {
+              setIsLoading(false);
+            }
+          }
+        }
+        else if (item.type === 'text/plain') {
+          item.getAsString(async (text) => {
+            if (text.match(/https?:\/\//i)) {
+              setImageUrl(text);
+              setShowUrlInput(true);
+            }
+          });
+        }
+      }
+    };
 
-.image-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: #fafafa;
-  border-radius: 12px;
-  z-index: 1;
-  display: block;
-}
+    document.addEventListener('paste', handlePaste);
+    return () => {
+      document.removeEventListener('paste', handlePaste);
+    };
+  }, [images.length, handleFile, showModal]);
 
-.image-preview.load-error::before {
-  content: '图片加载失败';
-  color: #dc3545;
-  font-weight: 500;
-  z-index: 0;
-}
+  // ====== 文件上传 ======
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    setIsLoading(true);
+    try {
+      const startIndex = images.length;
+      const imageUrls = files.map(file => URL.createObjectURL(file));
+      setImages(prev => [...prev, ...imageUrls]);
+      setResults(prev => [...prev, ...new Array(files.length).fill('')]);
+      setCurrentIndex(startIndex);
+      await concurrentProcess(
+        files,
+        (file, fileIndex) => handleFile(file, startIndex + fileIndex),
+        2
+      );
+    } catch (error) {
+      console.error('处理上传的文件时出错:', error);
+      alert('处理上传的文件时发生错误。请检查文件或稍后重试。');
+    } finally {
+      setIsLoading(false);
+      if (e && e.target) {
+        e.target.value = null;
+      }
+    }
+  };
 
-.image-preview:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
-}
+  // ====== 图片导航 ======
+  const handlePrevImage = () => {
+    if (currentIndex > 0 && !isLoading && !isStreaming) {
+      setCurrentIndex(currentIndex - 1);
+    }
+  };
+  const handleNextImage = () => {
+    if (currentIndex < images.length - 1 && !isLoading && !isStreaming) {
+      setCurrentIndex(currentIndex + 1);
+    }
+  };
 
-.image-preview.loading .loading-overlay {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    90deg,
-    rgba(14, 156, 110, 0.08),    /* 原 rgba(0,113,227,0.08) */
-    rgba(184, 134, 11, 0.08),    /* 原 rgba(98,0,255,0.08) */
-    rgba(218, 165, 32, 0.08),    /* 原 rgba(255,44,171,0.08) */
-    rgba(14, 156, 110, 0.08)
+  // ====== 全局拖拽监听 ======
+  useEffect(() => {
+    const handleGlobalDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) { if (!isDraggingGlobal) { setIsDraggingGlobal(true); } } };
+    const handleGlobalDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
+    const handleGlobalDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!e.relatedTarget || e.relatedTarget === null || e.relatedTarget === document.documentElement) { setIsDraggingGlobal(false); setIsDragging(false); } };
+    const handleGlobalDrop = (e) => { e.preventDefault(); e.stopPropagation(); if (dropZoneRef.current && !dropZoneRef.current.contains(e.target)) { setIsDraggingGlobal(false); setIsDragging(false); } };
+    window.addEventListener('dragenter', handleGlobalDragEnter);
+    window.addEventListener('dragover', handleGlobalDragOver);
+    window.addEventListener('dragleave', handleGlobalDragLeave);
+    window.addEventListener('drop', handleGlobalDrop);
+    return () => { window.removeEventListener('dragenter', handleGlobalDragEnter); window.removeEventListener('dragover', handleGlobalDragOver); window.removeEventListener('dragleave', handleGlobalDragLeave); window.removeEventListener('drop', handleGlobalDrop); };
+  }, [isDraggingGlobal]);
+  const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.types.includes('Files')) { setIsDragging(true); } };
+  const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
+  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!dropZoneRef.current.contains(e.relatedTarget)) { setIsDragging(false); } };
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    setIsDraggingGlobal(false);
+    const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+
+    if (files.length === 0) {
+        const items = Array.from(e.dataTransfer.items);
+        const linkPromises = items
+          .filter(item => item.kind === 'string' && (item.type === 'text/uri-list' || item.type === 'text/plain'))
+          .map(item => new Promise(resolve => item.getAsString(resolve)));
+        Promise.all(linkPromises).then(urls => {
+            const firstImageUrl = urls.find(url => url && url.match(/https?:\/\//i) && url.match(/\.(jpg|jpeg|png|gif|webp|avif|bmp|svg)(\?.*)?$/i));
+            if (firstImageUrl) {
+                setImageUrl(firstImageUrl);
+                setShowUrlInput(true);
+            } else if (urls.some(url => url && url.match(/https?:\/\//i))) {
+                alert('拖放的链接不是可识别的图片 URL。');
+            }
+        }).catch(err => {
+            console.error("处理拖放的链接时出错:", err);
+            alert('处理拖放内容时出错。');
+        });
+        return;
+    }
+
+    setIsLoading(true);
+    try {
+      const startIndex = images.length;
+      const imageUrls = files.map(file => URL.createObjectURL(file));
+      setImages(prev => [...prev, ...imageUrls]);
+      setResults(prev => [...prev, ...new Array(files.length).fill('')]);
+      setCurrentIndex(startIndex);
+      await concurrentProcess(
+        files,
+        (file, fileIndex) => handleFile(file, startIndex + fileIndex),
+        2
+      );
+    } catch (error) {
+      console.error('处理拖放的文件时出错:', error);
+      alert('处理拖放的文件时发生错误。');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ====== URL 上传 ======
+  const handleUrlSubmit = async (e) => {
+    e.preventDefault();
+    if (!imageUrl) return;
+    setIsLoading(true);
+    setShowUrlInput(false);
+    try {
+      let imageBlob;
+      let finalUrl = imageUrl;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const response = await fetch(finalUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (!response.ok) throw new Error(`直接获取失败: ${response.status} ${response.statusText}`);
+        imageBlob = await response.blob();
+      } catch (directError) {
+        console.warn("直接获取失败:", directError);
+        const proxyServices = [
+           (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        ];
+        let proxySuccess = false;
+        for (const getProxyUrl of proxyServices) {
+          const proxyUrl = getProxyUrl(imageUrl);
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const response = await fetch(proxyUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            if (!response.ok) throw new Error(`代理获取失败: ${response.status} ${response.statusText}`);
+            imageBlob = await response.blob();
+            if (!imageBlob.type || !imageBlob.type.startsWith('image/')) {
+                throw new Error(`代理返回的不是有效的图片类型: ${imageBlob.type || '未知类型'}`);
+            }
+            proxySuccess = true;
+            break;
+          } catch (proxyError) {
+            console.warn(`代理获取失败 (${proxyUrl}):`, proxyError);
+          }
+        }
+        if (!proxySuccess) {
+            throw new Error('直接获取和通过代理获取均失败。可能由于 CORS 限制、网络问题或无效链接导致无法加载图片。');
+        }
+      }
+
+      if (!imageBlob || !imageBlob.type.startsWith('image/')) {
+        throw new Error(`获取到的内容不是有效的图片类型: ${imageBlob.type || '未知类型'}`);
+      }
+      const filename = imageUrl.substring(imageUrl.lastIndexOf('/') + 1).split('?')[0] || 'image_from_url.jpg';
+      const file = new File([imageBlob], filename, { type: imageBlob.type });
+      const imageUrlObject = URL.createObjectURL(file);
+
+      await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = resolve;
+        img.onerror = (errEvent) => {
+          URL.revokeObjectURL(imageUrlObject);
+          console.error("Image load error from Object URL:", errEvent);
+          reject(new Error('无法从对象 URL 加载图片，可能是无效的图片数据。'));
+        };
+        img.src = imageUrlObject;
+      });
+
+      const newIndex = images.length;
+      setImages(prev => [...prev, imageUrlObject]);
+      setResults(prev => [...prev, '']);
+      setCurrentIndex(newIndex);
+      await handleFile(file, newIndex);
+      setImageUrl('');
+
+    } catch (error) {
+      console.error('从 URL 加载图片时出错:', error);
+      alert(`无法加载图片: ${error.message}\n\n请检查链接是否正确且指向公开可访问的图片文件。\n\n您也可以尝试：\n1. 右键图片另存为后上传\n2. 使用截图工具后粘贴`);
+      setShowUrlInput(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ====== 模态框逻辑 ======
+  const handleImageClick = () => {
+    if (!images[currentIndex]) return;
+    setModalPosition({ x: 0, y: 0 });
+    setModalScale(1);
+    setShowModal(true);
+  };
+  const handleCloseModal = () => {
+    setShowModal(false);
+  };
+
+  // ====== 复制 ======
+  const handleCopyText = () => {
+    if (editText != null && !isStreaming) {
+        const plainText = editText
+            .replace(/(\*\*|__)(.*?)\1/g, '$2')
+            .replace(/(\*|_)(.*?)\1/g, '$2')
+            .replace(/\n{2,}/g, '\n');
+
+        navigator.clipboard.writeText(plainText.trim())
+            .then(() => {
+                const button = document.querySelector('.copy-button');
+                if (button) {
+                    button.textContent = '已复制';
+                    button.classList.add('copied');
+                    setTimeout(() => {
+                        button.textContent = '复制内容';
+                        button.classList.remove('copied');
+                    }, 1500);
+                }
+            })
+            .catch(err => {
+                console.error('复制失败:', err);
+                alert('复制失败，您的浏览器可能不支持或权限不足，请尝试手动复制。');
+            });
+    }
+  };
+
+  // ====== 编辑器处理 ======
+  const handleInput = (e) => {
+      const currentHtml = e.currentTarget.innerHTML;
+      const newMarkdown = turndownService.turndown(currentHtml);
+      setEditText(newMarkdown);
+      setResults(prevResults => {
+          const newResults = [...prevResults];
+          if (currentIndex < newResults.length) {
+              newResults[currentIndex] = newMarkdown;
+          }
+          return newResults;
+      });
+  };
+
+  const handleManualCopy = (e) => {
+    e.preventDefault();
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+    const selectedText = selection.toString();
+    const normalizedText = selectedText
+        .replace(/(\*\*|__)(.*?)\1/g, '$2')
+        .replace(/(\*|_)(.*?)\1/g, '$2')
+        .replace(/\n{3,}/g, '\n\n');
+    e.clipboardData.setData('text/plain', normalizedText);
+  };
+
+  useEffect(() => {
+      if (isStreaming) return;
+      const currentMarkdown = results[currentIndex] || '';
+      setEditText(currentMarkdown);
+      if (editDivRef.current) {
+          const editorMarkdown = turndownService.turndown(editDivRef.current.innerHTML);
+          if (editorMarkdown !== currentMarkdown) {
+              const rawHtml = marked.parse(currentMarkdown, { breaks: true });
+              const safeHtml = DOMPurify.sanitize(rawHtml);
+              editDivRef.current.innerHTML = safeHtml;
+          }
+      }
+  }, [currentIndex, results, isStreaming]);
+
+  const handleModalMouseDown = (e) => { if (e.target.classList.contains('modal-close') || e.button !== 0) { return; } const isTouchEvent = e.touches && e.touches.length > 0; const clientX = isTouchEvent ? e.touches[0].clientX : e.clientX; const clientY = isTouchEvent ? e.touches[0].clientY : e.clientY; e.preventDefault(); setIsDraggingModal(true); setModalOffset({ x: clientX - modalPosition.x, y: clientY - modalPosition.y, }); const modalContent = e.currentTarget; if (modalContent) { modalContent.style.cursor = 'grabbing'; modalContent.style.transition = 'none'; } };
+  const handleModalWheel = (e) => { e.preventDefault(); const zoomSensitivity = 0.0005; const minScale = 0.1; const maxScale = 10; const scaleChange = -e.deltaY * zoomSensitivity * modalScale; setModalScale(prevScale => { let newScale = prevScale + scaleChange; newScale = Math.max(minScale, Math.min(newScale, maxScale)); return newScale; }); if (e.currentTarget) { e.currentTarget.style.transition = 'transform 0.1s ease-out'; } };
+  useEffect(() => {
+    const handleMove = (e) => { const isTouchEvent = e.touches && e.touches.length > 0; const clientX = isTouchEvent ? e.touches[0].clientX : e.clientX; const clientY = isTouchEvent ? e.touches[0].clientY : e.clientY; setModalPosition({ x: clientX - modalOffset.x, y: clientY - modalOffset.y, }); };
+    const handleEnd = () => { setIsDraggingModal(false); const modalContent = document.querySelector('.modal-content'); if (modalContent) { modalContent.style.cursor = 'grab'; modalContent.style.transition = 'transform 0.1s ease-out'; } };
+    if (isDraggingModal) { window.addEventListener('mousemove', handleMove, { capture: true }); window.addEventListener('mouseup', handleEnd, { capture: true }); window.addEventListener('touchmove', handleMove, { passive: false }); window.addEventListener('touchend', handleEnd); }
+    return () => { window.removeEventListener('mousemove', handleMove, { capture: true }); window.removeEventListener('mouseup', handleEnd, { capture: true }); window.removeEventListener('touchmove', handleMove); window.removeEventListener('touchend', handleEnd); };
+  }, [isDraggingModal, modalOffset]);
+
+  // ====== 渲染（完全保留原结构） ======
+  return (
+    <div className="app">
+      <header>
+        <a
+          href="https://github.com/kayaladream/GeminiOCR"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="github-link"
+          title="在 GitHub 上查看源码"
+        >
+          <svg height="32" aria-hidden="true" viewBox="0 0 16 16" version="1.1" width="32">
+            <path fillRule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+          </svg>
+        </a>
+        <h1>PaddleOCR - 高精度OCR系统</h1>
+        <p>
+          <b>基于PaddleOCR-VL API的智能文字识别解决方案，可精准识别多语言文字、表格等。</b>
+          <br />
+          识别出的表格需在编辑框内手动复制，粘贴至 Excel 即可保留格式使用。
+        </p>
+      </header>
+
+      <main className={images.length > 0 ? 'has-content' : ''}>
+        <div className={`upload-section ${images.length > 0 ? 'with-image' : ''}`}>
+          <div
+            ref={dropZoneRef}
+            className={`upload-zone ${isDragging ? 'dragging' : ''}`}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            aria-label="图片上传区域"
+          >
+            <div className="upload-container">
+              <label className="upload-button" htmlFor="file-input">
+                {images.length > 0 ? '添加新的图片' : '上传图片'}
+              </label>
+              <input
+                id="file-input" type="file" accept="image/*" onChange={handleImageUpload} multiple hidden aria-hidden="true"
+              />
+              <button
+                type="button" className="url-button" onClick={() => setShowUrlInput(!showUrlInput)} aria-expanded={showUrlInput}
+              >
+                {showUrlInput ? '取消链接输入' : '使用链接上传'}
+              </button>
+            </div>
+            {showUrlInput && (
+              <form onSubmit={handleUrlSubmit} className="url-form">
+                <input
+                  type="url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="粘贴图片链接 (URL)" className="url-input" required aria-label="图片链接输入框"
+                />
+                <button type="submit" className="url-submit">确认</button>
+              </form>
+            )}
+            {!images.length && !isDragging && !showUrlInput && (
+              <p className="upload-hint">或将图片拖放到此处 / 粘贴图片</p>
+            )}
+            {isDragging && (
+              <div className="dragging-overlay-text">松开即可上传图片</div>
+            )}
+          </div>
+          {isDraggingGlobal && (
+            <div className="drag-overlay active"></div>
+          )}
+          {images.length > 0 && (
+            <div className="images-preview">
+              <div className="image-navigation">
+                <button onClick={handlePrevImage} disabled={currentIndex === 0 || isLoading || isStreaming} className="nav-button" aria-label="上一张图片">←</button>
+                <span className="image-counter" aria-live="polite">{currentIndex + 1} / {images.length}</span>
+                <button onClick={handleNextImage} disabled={currentIndex === images.length - 1 || isLoading || isStreaming} className="nav-button" aria-label="下一张图片">→</button>
+              </div>
+              <div className={`image-preview ${isLoading && !results[currentIndex] ? 'loading' : ''}`}>
+                <img
+                  key={images[currentIndex]} src={images[currentIndex]} alt={`预览 ${currentIndex + 1}`} onClick={handleImageClick} style={{ cursor: images[currentIndex] ? 'zoom-in' : 'default' }}
+                  onError={(e) => { console.error("加载图片失败:", images[currentIndex]); e.target.alt = '图片加载失败'; e.target.style.display = 'none'; e.target.closest('.image-preview')?.classList.add('load-error'); }}
+                />
+                {isLoading && !results[currentIndex] &&
+                  <div className="loading-overlay">
+                    {isStreaming ? '识别中...' : (isLoading ? '处理中...' : '')}
+                  </div>
+                }
+              </div>
+            </div>
+          )}
+        </div>
+
+        {(images.length > 0 || isLoading || isStreaming) && (
+          <div className="result-section">
+            <div className="result-container" ref={resultRef}>
+              {isLoading && !isStreaming && results[currentIndex] == null &&
+                <div className="loading result-loading">等待识别...</div>
+              }
+
+              {isStreaming && (
+                <div className="result-text">
+                  <div className="result-header">
+                    <span aria-live="polite">
+                      第 {currentIndex + 1} 张图片的识别结果 (识别中...)
+                    </span>
+                  </div>
+                  <div className="gradient-text">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                      components={{
+                        table: ({ node, ...props }) => (<div style={{ overflowX: 'auto', maxWidth: '100%' }}><table className="markdown-table" {...props} /></div>),
+                        th: ({ node, ...props }) => (<th className="markdown-th" {...props} />),
+                        td: ({ node, ...props }) => (<td className="markdown-td" {...props} />),
+                      }}
+                    >
+                      {streamingText}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              )}
+
+              {!isStreaming && results[currentIndex] != null && (
+                <div className="result-text editing-area">
+                  <div className="result-header">
+                    <span>编辑第 {currentIndex + 1} 张图片的结果</span>
+                    <div>
+                      <button className="copy-button" onClick={handleCopyText}>复制内容</button>
+                    </div>
+                  </div>
+                  <div
+                    ref={editDivRef}
+                    contentEditable={true}
+                    className="edit-content-editable"
+                    onInput={handleInput}
+                    onCopy={handleManualCopy}
+                    suppressContentEditableWarning={true}
+                    aria-label={`编辑识别结果 ${currentIndex + 1}`}
+                    spellCheck="false"
+                  />
+                </div>
+              )}
+
+              {!isLoading && !isStreaming && results[currentIndex] == null && images.length > 0 && (
+                <div className="result-placeholder">
+                  <span style={{ fontSize: '1.1em', fontWeight: 'bold' }}>⚠️ 系统提示</span>
+                  <br />
+                  <br />
+                  当前图片状态异常，暂无识别结果或由于网络中断导致失败，请尝试重新点击上传。
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
+
+      {showModal && images[currentIndex] && (
+        <div className="modal-overlay">
+          <div
+            className="modal-content"
+            onMouseDown={handleModalMouseDown}
+            onWheel={handleModalWheel}
+            onTouchStart={handleModalMouseDown}
+            style={{
+              transform: `translate(${modalPosition.x}px, ${modalPosition.y}px) scale(${modalScale})`,
+              cursor: isDraggingModal ? 'grabbing' : 'grab',
+              transition: isDraggingModal ? 'none' : 'transform 0.1s ease-out',
+              touchAction: 'none',
+              userSelect: 'none',
+            }}
+          >
+            <img src={images[currentIndex]} alt="放大预览" draggable="false" style={{ pointerEvents: 'none', userSelect: 'none' }} />
+            <button
+              className="modal-close" aria-label="关闭预览" onClick={handleCloseModal}
+              onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}
+            >×</button>
+          </div>
+        </div>
+      )}
+    </div>
   );
-  background-size: 300% 100%;
-  animation: gradientMove 3s linear infinite;
-  border-radius: 12px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #0e9c6e;               /* 原 #0071e3 */
-  font-weight: 500;
-  font-size: 1.1rem;
 }
 
-.loading-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(
-    90deg,
-    rgba(14, 156, 110, 0.08),
-    rgba(184, 134, 11, 0.08),
-    rgba(218, 165, 32, 0.08),
-    rgba(14, 156, 110, 0.08)
-  );
-  background-size: 300% 100%;
-  animation: gradientMove 3s linear infinite;
-  border-radius: 12px;
-  z-index: 2;
-  color: #0e9c6e;
-  font-weight: 500;
-  font-size: 1.1rem;
-}
-
-.upload-zone {
-  position: relative;
-  border: 2px dashed #ccc;
-  border-radius: 8px;
-  padding: 20px;
-  text-align: center;
-  transition: all 0.3s ease;
-  background: rgba(255, 255, 255, 0.9);
-  min-height: 150px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.upload-zone.dragging {
-  border-color: #2ecc71;                /* 原 #4CAF50 */
-  background: rgba(46, 204, 113, 0.05); /* 原 rgba(76,175,80,0.05) */
-  transform: scale(1.02);
-  box-shadow: 0 0 20px rgba(46, 204, 113, 0.2); /* 原 rgba(76,175,80,0.2) */
-}
-
-.upload-zone.dragging .upload-container,
-.upload-zone.dragging .upload-hint {
-  opacity: 0.5;
-}
-
-.upload-zone.dragging::after {
-  content: '拖拽到此处上传图片';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 1.2em;
-  color: #2ecc71;                    /* 原 #4CAF50 */
-  background: rgba(255, 255, 255, 0.95);
-  padding: 10px 20px;
-  border-radius: 4px;
-  z-index: 10;
-  animation: fadeIn 0.3s ease;
-  pointer-events: none;
-}
-
-.dragging-overlay-text {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 1.2em;
-  color: #2ecc71;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 10px 20px;
-  border-radius: 4px;
-  z-index: 10;
-  pointer-events: none;
-}
-
-.upload-container {
-  transition: all 0.3s ease;
-}
-
-.upload-hint {
-  margin-top: 1rem;
-  color: #86868b;
-  font-size: 0.9rem;
-  transition: all 0.3s ease;
-  user-select: none;
-  text-align: center;
-  width: 100%;
-}
-
-.drag-overlay {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(46, 204, 113, 0.1); /* 原 rgba(76,175,80,0.1) */
-  z-index: 1000;
-  pointer-events: none;
-}
-
-.drag-overlay.active {
-  display: block;
-}
-
-.drag-overlay::after {
-  content: '将图片拖到下方框内';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 1.5em;
-  color: #2ecc71;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 15px 30px;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-main {
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-main.has-content {
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 2.5rem;
-}
-
-.upload-section {
-  width: 100%;
-  max-width: 600px;
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  flex-shrink: 0;
-}
-
-.upload-section.with-image {
-  width: 50%;
-  max-width: 600px;
-}
-
-.result-section {
-  flex: 1;
-  min-width: 0;
-  opacity: 0;
-  animation: fadeIn 0.5s ease-out forwards;
-  animation-delay: 0.2s;
-  max-height: calc(80vh - 90px);
-  position: sticky;
-  top: 2rem;
-  align-self: stretch;
-}
-
-.result-container {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-radius: 20px;
-  padding: 2rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(14, 156, 110, 0.1); /* 原 rgba(0,113,227,0.1) */
-  transition: none;
-  overflow-y: auto;
-  max-height: 100%;
-  height: auto;
-  scroll-behavior: smooth;
-  display: flex;             /* 恢复原高度自适应 */
-  flex-direction: column;    /* 恢复原高度自适应 */
-}
-
-.result-container:hover {
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
-}
-
-.loading.result-loading {
-  color: #0e9c6e;  /* 原 #0071e3 */
-  font-weight: 500;
-  font-size: 1.1rem;
-  text-align: center;
-  padding: 2rem 0;
-}
-
-.result-text {
-  line-height: 1.6;
-  color: #1d1d1f;
-  width: 100%;
-  padding: 0 0 1rem 0;
-  transition: none;
-}
-
-.result-text .result-header {
-  min-height: 38px;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(14, 156, 110, 0.1); /* 原 rgba(0,113,227,0.1) */
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.result-text table,
-.result-text ul,
-.result-text ol {
-  width: 100%;
-  color: #1d1d1f;
-  -webkit-text-fill-color: #1d1d1f;
-  margin: 1rem 0;
-  opacity: 0;
-  animation: fadeIn 0.5s ease-out forwards;
-  animation-delay: 0.3s;
-}
-
-.result-text table {
-  border-collapse: collapse;
-  table-layout: fixed;
-  background: rgba(255, 255, 255, 0.8);
-}
-
-.result-text th,
-.result-text td {
-  border: 1px solid #e0e0e0;
-  padding: 12px 16px;
-  text-align: left;
-  color: #1d1d1f;
-  -webkit-text-fill-color: #1d1d1f;
-  word-wrap: break-word;
-  vertical-align: top;
-  opacity: 0;
-  animation: smoothReveal 1s ease-out forwards;
-  animation-delay: calc(var(--index) * 50ms);
-}
-
-.result-text p {
-  margin: 1rem 0;
-  line-height: 1.8;
-}
-
-.gradient-text {
-  color: #1d1d1f;
-  position: relative;
-  min-height: 50px;
-  font-size: 1.1rem;
-  font-family: "微软雅黑", serif;
-}
-
-.gradient-text > div {
-  line-height: 1.6;
-}
-
-.gradient-text p,
-.gradient-text li,
-.gradient-text td,
-.gradient-text th {
-  opacity: 0;
-  animation: smoothReveal 1s ease-out forwards;
-  animation-delay: calc(var(--index) * 50ms);
-  background: linear-gradient(90deg, #0e9c6e, #b8860b, #daa520); /* 新渐变色 */
-  background-size: 300% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  line-height: 1.8;
-  margin: 0.8rem 0;
-}
-
-.gradient-text table,
-.gradient-text ul,
-.gradient-text ol {
-  margin: 1rem 0;
-}
-
-.gradient-text table {
-  border-collapse: collapse;
-  width: 100%;
-}
-
-.gradient-text th,
-.gradient-text td {
-  border: 1px solid #e0e0e0;
-  padding: 12px;
-  text-align: left;
-  vertical-align: top;
-}
-
-.result-text tr:hover td {
-  background: rgba(14, 156, 110, 0.02); /* 原 rgba(0,113,227,0.02) */
-}
-
-.result-text table .gradient-text {
-  display: block;
-}
-
-.result-container::-webkit-scrollbar {
-  width: 8px;
-}
-.result-container::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
-}
-.result-container::-webkit-scrollbar-thumb {
-  background: #0e9c6e;  /* 原 #0071e3 */
-  border-radius: 4px;
-  transition: all 0.3s ease;
-}
-.result-container::-webkit-scrollbar-thumb:hover {
-  background: #07885a;  /* 原 #005bb5 */
-}
-
-.url-button {
-  background: transparent;
-  color: #0e9c6e;  /* 原 #0071e3 */
-  padding: 1rem 2rem;
-  border-radius: 99px;
-  font-size: 1.1rem;
-  font-weight: 500;
-  border: 2px solid #0e9c6e;
-  transition: all 0.3s ease;
-  cursor: pointer;
-}
-.url-button:hover {
-  background: rgba(14, 156, 110, 0.1); /* 原 rgba(0,113,227,0.1) */
-  transform: translateY(-2px);
-}
-
-.url-form {
-  width: 100%;
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 1rem;
-  animation: fadeIn 0.3s ease-out;
-}
-
-.url-input {
-  flex: 1;
-  padding: 0.8rem 1rem;
-  border: 2px solid rgba(14, 156, 110, 0.2); /* 原 rgba(0,113,227,0.2) */
-  border-radius: 12px;
-  font-size: 1rem;
-  transition: all 0.3s ease;
-  background: rgba(255, 255, 255, 0.9);
-  min-width: 0;
-}
-.url-input:focus {
-  outline: none;
-  border-color: #0e9c6e;
-  box-shadow: 0 0 0 3px rgba(14, 156, 110, 0.1); /* 原 rgba(0,113,227,0.1) */
-}
-
-.url-submit {
-  padding: 0.8rem 1.5rem;
-  background: #0e9c6e;  /* 原 #0071e3 */
-  color: white;
-  border: none;
-  border-radius: 12px;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  flex-shrink: 0;
-}
-.url-submit:hover {
-  background: #07885a;  /* 原 #005bb5 */
-  transform: translateY(-2px);
-}
-
-@media (max-width: 768px) {
-  .app {
-    padding: 2rem 1rem;
-  }
-  header h1 { font-size: 1.5rem; }
-  header p { font-size: 0.75rem; }
-  .upload-button, .url-button {
-    padding: 0.8rem 1.5rem;
-    font-size: 1rem;
-  }
-  .url-submit {
-    padding: 0.8rem 1rem;
-  }
-}
-
-.images-preview {
-  width: 100%;
-}
-
-.image-navigation {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.nav-button {
-  background: #0e9c6e;  /* 原 #0071e3 */
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 36px;
-  height: 36px;
-  font-size: 1.2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  flex-shrink: 0;
-}
-.nav-button:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-.nav-button:not(:disabled):hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(14, 156, 110, 0.3); /* 原 rgba(0,113,227,0.3) */
-}
-
-.image-counter {
-  font-size: 0.9rem;
-  color: #86868b;
-  min-width: 60px;
-  text-align: center;
-}
-
-.modal-overlay {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 999;
-  animation: fadeIn 0.3s ease-out;
-  pointer-events: none;
-}
-
-.modal-content {
-  position: relative;
-  max-width: 90vw;
-  max-height: 90vh;
-  background: transparent;
-  border-radius: 12px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-  animation: scaleIn 0.3s ease-out;
-  cursor: grab;
-  overflow: visible;
-  pointer-events: auto;
-}
-.modal-content img {
-  display: block;
-  max-width: 100%;
-  max-height: 90vh;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  border-radius: 8px;
-  user-select: none;
-  -webkit-user-drag: none;
-}
-
-.modal-close {
-  position: absolute;
-  top: 0;
-  right: 0;
-  transform: translate(50%, -50%);
-  width: 40px; height: 40px;
-  border-radius: 50%;
-  background: rgba(60, 60, 60, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  font-size: 24px;
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-  transition: all 0.2s ease;
-  z-index: 10;
-  pointer-events: auto;
-}
-.modal-close:hover {
-  background: rgba(30, 30, 30, 0.9);
-  transform: translate(50%, -50%) scale(1.1);
-  color: #fff;
-}
-
-.image-preview img[src] {
-  cursor: zoom-in;
-}
-
-.katex {
-  color: #1d1d1f !important;
-  pointer-events: none;
-}
-
-.latex-inline {
-  display: inline-block;
-  vertical-align: middle;
-  margin: 0 0.2em;
-  opacity: 0;
-  animation: smoothReveal 1s ease-out forwards;
-  animation-delay: calc(var(--index) * 50ms);
-}
-.latex-block {
-  margin: 1em 0;
-  overflow-x: auto;
-  max-width: 100%;
-  display: flex;
-  justify-content: center;
-  padding: 0.5em 0;
-  opacity: 0;
-  animation: smoothReveal 1s ease-out forwards;
-  animation-delay: calc(var(--index) * 50ms);
-}
-.latex-block .katex-display {
-  margin: 0;
-}
-.katex {
-  font-size: 1.1em;
-  line-height: 1.2;
-  text-rendering: optimizeLegibility;
-  animation: none !important;
-}
-.katex-display > .katex {
-  display: inline-block !important;
-  text-align: center;
-}
-.katex-html {
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
-@media (max-width: 768px) {
-  .katex { font-size: 1em; }
-  .latex-block { max-width: 100%; overflow-x: auto; }
-}
-
-.copy-button {
-  background: #0e9c6e;  /* 原 #0071e3 */
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-.copy-button:hover {
-  background: #07885a;  /* 原 #005bb5 */
-  transform: translateY(-1px);
-}
-.copy-button.copied {
-  background: #27ae60;  /* 原 #34c759 */
-}
-
-.github-link {
-  position: fixed;
-  top: 0.5rem; right: 0.5rem;
-  z-index: 1000;
-  transition: transform 0.3s ease;
-}
-.github-link:hover { transform: scale(1.1); }
-.github-link svg {
-  fill: #1d1d1f;
-  opacity: 0.8;
-  transition: all 0.3s ease;
-  width: 32px; height: 32px;
-}
-.github-link:hover svg { fill: #0e9c6e; opacity: 1; }  /* 原 #0071e3 */
-
-@media (max-width: 768px) {
-  .github-link { top: 0.5rem; right: 0.5rem; }
-  .github-link svg { width: 28px; height: 28px; }
-}
-
-.edit-button, .save-button, .cancel-button {
-  padding: 6px 12px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-  white-space: nowrap;
-}
-.edit-button:hover, .save-button:hover, .cancel-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
-}
-.edit-button { background: #ffc107; color: black; }
-.save-button { background: #28a745; color: white; }
-.cancel-button { background: #dc3545; color: white; }
-.editing-area .result-header div {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.editing-area .gradient-text p,
-.editing-area .gradient-text li,
-.editing-area .gradient-text td,
-.editing-area .gradient-text th {
-  animation: none !important;
-  opacity: 1 !important;
-  background: none !important;
-  color: inherit !important;
-  -webkit-text-fill-color: inherit !important;
-}
-
-.edit-content-editable {
-  width: 100%;
-  min-height: 400px;
-  max-height: calc(80vh - 150px);
-  overflow-y: auto;
-  font-size: 1.13rem;
-  font-family: "微软雅黑", serif;
-  line-height: 1.5;
-  border: 1px solid #ced4da;
-  border-radius: 8px;
-  padding: 15px;
-  box-sizing: border-box;
-  margin-top: 1rem;
-  background-color: #f8f9fa;
-  color: #212529;
-  cursor: text;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.edit-content-editable:focus {
-  border-color: #86b7fe;
-  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-}
-
-.edit-content-editable strong {
-  font-weight: bold;
-}
-.edit-content-editable em {
-  font-style: italic;
-}
-.edit-content-editable p {
-  margin: 0 0 0em 0;
-}
-.edit-content-editable ul,
-.edit-content-editable ol {
-  padding-left: 2em;
-  margin: 0 0 1em 0;
-}
-.edit-content-editable li {
-  margin-bottom: 0.2em;
-}
-.edit-content-editable code {
-  background-color: rgba(27, 31, 35, 0.05);
-  padding: .2em .4em;
-  margin: 0;
-  font-size: 85%;
-  border-radius: 3px;
-}
-.edit-content-editable pre {
-  padding: 16px;
-  overflow: auto;
-  font-size: 85%;
-  line-height: 1.45;
-  background-color: #f6f8fa;
-  border-radius: 3px;
-  margin: 0 0 1em 0;
-}
-.edit-content-editable pre code {
-  padding: 0;
-  margin: 0;
-  font-size: 100%;
-  background-color: transparent;
-  border-radius: 0;
-}
-.edit-content-editable blockquote {
-  padding: 0 1em;
-  color: #6a737d;
-  border-left: 0.25em solid #dfe2e5;
-  margin: 0 0 1em 0;
-}
-.edit-content-editable table {
-  border-collapse: collapse;
-  margin: 1em 0;
-  width: auto;
-  border-spacing: 0;
-}
-.edit-content-editable th,
-.edit-content-editable td {
-  border: 1px solid #dfe2e5;
-  padding: 6px 13px;
-}
-.edit-content-editable .katex {
-  color: inherit !important;
-  pointer-events: auto;
-}
-
-.result-placeholder {
-  text-align: center;
-  color: #86868b;
-  padding: 2rem;
-  font-style: italic;
-}
-
-/* 响应式保留原版行为 */
-@media (max-width: 992px) {
-  main.has-content {
-    flex-direction: column;
-    align-items: center;
-  }
-  .upload-section.with-image {
-    width: 100%;
-    max-width: 600px;
-  }
-  .result-section {
-    max-height: 60vh;
-    position: relative;
-    top: 0;
-    width: 100%;
-    max-width: 600px;
-    margin-top: 2rem;
-  }
-}
+export default App;
