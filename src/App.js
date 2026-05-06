@@ -8,30 +8,27 @@ import TurndownService from 'turndown';
 import DOMPurify from 'dompurify';
 import './App.css';
 
-// ====== 原有预处理函数（保留） ======
+// ====== 预处理：清理 Markdown，修复上标等常见误转 ======
 const preprocessText = (text) => {
   if (!text) return '';
+
+  // 保存表格
   const tables = [];
   text = text.replace(/\|[^\n]+\|\n\|[-|\s]+\|(?:\n\|[^\n]+\|)+/g, (match) => {
     tables.push(match);
     return `__TABLE_${tables.length - 1}__`;
   });
+
+  // 基础清理
   text = text.replace(/\\\\\(/g, '$');
   text = text.replace(/\\\\\)/g, '$');
   text = text.replace(/\\\\\[/g, '$$');
   text = text.replace(/\\\\\]/g, '$$');
-  text = text.replace(/```[\s\S]*?```/g, (match) => {
-    const content = match.slice(3, -3).trim();
-    return content;
-  });
+  text = text.replace(/```[\s\S]*?```/g, (match) => match.slice(3, -3).trim());
   text = text.replace(/```\w*\n?/g, '');
   text = text.replace(/(\d+)\.\s*\n+/g, '$1. ');
-  text = text.replace(/\n*\$\$\s*([\s\S]*?)\s*\$\$\n*/g, (match, formula) => {
-    return `\n\n$$${formula.trim()}$$\n\n`;
-  });
-  text = text.replace(/\$\s*(.*?)\s*\$/g, (match, formula) => {
-    return `$${formula.trim()}$`;
-  });
+  text = text.replace(/\n*\$\$\s*([\s\S]*?)\s*\$\$\n*/g, (_, formula) => `\n\n$$${formula.trim()}$$\n\n`);
+  text = text.replace(/\$\s*(.*?)\s*\$/g, (_, formula) => `$${formula.trim()}$`);
   text = text.replace(/(\d+\.)\s*(\$\$[\s\S]*?\$\$)/g, '$1\n\n$2');
   text = text.replace(/(\d+)\.\s+/g, '$1');
   text = text.replace(/(\d+)\.\s+/g, '$1.');
@@ -42,13 +39,29 @@ const preprocessText = (text) => {
   text = text.replace(/>\s+/g, '>');
   text = text.replace(/#\s+/g, '#');
   text = text.replace(/\n{2,}/g, '\n\n');
-  text = text.replace(/__TABLE_(\d+)__/g, (match, index) => {
-    return `\n\n${tables[parseInt(index)]}\n\n`;
-  });
+
+  // 常见上标/下标误转
+  text = text.replace(/\$\^\{2\}\$/g, '²');
+  text = text.replace(/\$\^\{3\}\$/g, '³');
+  text = text.replace(/\$\^\{1\}\$/g, '¹');
+  text = text.replace(/\$\^\{0\}\$/g, '⁰');
+  text = text.replace(/\$\^\{4\}\$/g, '⁴');
+  text = text.replace(/\$\^\{5\}\$/g, '⁵');
+  text = text.replace(/\$\^\{6\}\$/g, '⁶');
+  text = text.replace(/\$\^\{7\}\$/g, '⁷');
+  text = text.replace(/\$\^\{8\}\$/g, '⁸');
+  text = text.replace(/\$\^\{9\}\$/g, '⁹');
+  text = text.replace(/\$\^\{n\}\$/g, 'ⁿ');
+  text = text.replace(/\$\^\{m\}\$/g, 'ᵐ');
+  text = text.replace(/\$\^\{([^}]+)\}\$/g, '^$1'); // 其他未知上标保留 ^ 形式
+
+  // 恢复表格
+  text = text.replace(/__TABLE_(\d+)__/g, (_, i) => `\n\n${tables[parseInt(i)]}\n\n`);
+
   return text.trim();
 };
 
-// ====== 新的辅助函数：File → base64 ======
+// ====== File → base64 ======
 const fileToBase64 = (file) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -57,35 +70,35 @@ const fileToBase64 = (file) => {
   });
 };
 
-// ====== Turndown 配置（完全原版） ======
+// ====== Turndown ======
 const turndownService = new TurndownService({
-    headingStyle: 'atx',
-    hr: '---',
-    bulletListMarker: '*',
-    codeBlockStyle: 'fenced',
-    emDelimiter: '*',
-    strongDelimiter: '**',
+  headingStyle: 'atx',
+  hr: '---',
+  bulletListMarker: '*',
+  codeBlockStyle: 'fenced',
+  emDelimiter: '*',
+  strongDelimiter: '**',
 });
 turndownService.keep(['table', 'thead', 'tbody', 'tr', 'th', 'td']);
 turndownService.addRule('katex', {
-    filter: function (node, options) {
-      return (
-        (node.nodeName === 'SPAN' && node.classList.contains('katex-display')) ||
-        (node.nodeName === 'SPAN' && node.classList.contains('katex'))
-      );
-    },
-    replacement: function (content, node, options) {
-      const latexSource = node.querySelector('annotation[encoding="application/x-tex"]');
-      if (latexSource) {
-        const formula = latexSource.textContent;
-        if (node.classList.contains('katex-display')) {
-          return `\n\n$$${formula}$$\n\n`;
-        } else {
-          return `$${formula}$`;
-        }
+  filter: function (node) {
+    return (
+      (node.nodeName === 'SPAN' && node.classList.contains('katex-display')) ||
+      (node.nodeName === 'SPAN' && node.classList.contains('katex'))
+    );
+  },
+  replacement: function (content, node) {
+    const latex = node.querySelector('annotation[encoding="application/x-tex"]');
+    if (latex) {
+      const formula = latex.textContent;
+      if (node.classList.contains('katex-display')) {
+        return `\n\n$$${formula}$$\n\n`;
+      } else {
+        return `$${formula}$`;
       }
-      return node.outerHTML;
     }
+    return node.outerHTML;
+  },
 });
 
 function App() {
@@ -95,19 +108,16 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
-  const resultRef = useRef(null);
   const dropZoneRef = useRef(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-
   const [isDraggingModal, setIsDraggingModal] = useState(false);
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
   const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
   const [modalScale, setModalScale] = useState(1);
-
   const [editText, setEditText] = useState('');
   const editDivRef = useRef(null);
 
@@ -133,7 +143,7 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // ====== 处理单个图片（调用新后端） ======
+  // ====== 处理单张图片 ======
   const handleFile = useCallback(async (file, index) => {
     if (!file.type.startsWith('image/')) return;
 
@@ -174,7 +184,7 @@ function App() {
     }
   }, [typewriterEffect]);
 
-  // ====== 并发处理（修复版，无 no-loop-func） ======
+  // ====== 并发控制 ======
   const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
     const queue = [...items.entries()];
     const workers = new Array(maxConcurrent).fill().map(async () => {
@@ -189,38 +199,24 @@ function App() {
   // ====== 粘贴监听 ======
   useEffect(() => {
     const handlePaste = async (e) => {
-      if (editDivRef.current && editDivRef.current.contains(e.target)) {
-        return;
-      }
-      if (showModal) {
-        return;
-      }
-
+      if (editDivRef.current?.contains(e.target) || showModal) return;
       e.preventDefault();
       const items = Array.from(e.clipboardData.items);
-
       for (const item of items) {
         if (item.type.startsWith('image/')) {
           const file = item.getAsFile();
           if (file) {
             setIsLoading(true);
-            try {
-              const imageUrl = URL.createObjectURL(file);
-              const newIndex = images.length;
-              setImages(prev => [...prev, imageUrl]);
-              setResults(prev => [...prev, '']);
-              setCurrentIndex(newIndex);
-              await handleFile(file, newIndex);
-            } catch (error) {
-              console.error('处理粘贴的图片时出错:', error);
-              alert('处理粘贴的图片时发生错误。');
-            } finally {
-              setIsLoading(false);
-            }
+            const url = URL.createObjectURL(file);
+            const newIdx = images.length;
+            setImages(prev => [...prev, url]);
+            setResults(prev => [...prev, '']);
+            setCurrentIndex(newIdx);
+            await handleFile(file, newIdx);
+            setIsLoading(false);
           }
-        }
-        else if (item.type === 'text/plain') {
-          item.getAsString(async (text) => {
+        } else if (item.type === 'text/plain') {
+          item.getAsString((text) => {
             if (text.match(/https?:\/\//i)) {
               setImageUrl(text);
               setShowUrlInput(true);
@@ -229,109 +225,82 @@ function App() {
         }
       }
     };
-
     document.addEventListener('paste', handlePaste);
-    return () => {
-      document.removeEventListener('paste', handlePaste);
-    };
+    return () => document.removeEventListener('paste', handlePaste);
   }, [images.length, handleFile, showModal]);
 
   // ====== 文件上传 ======
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
-    if (files.length === 0) return;
+    if (!files.length) return;
     setIsLoading(true);
     try {
-      const startIndex = images.length;
-      const imageUrls = files.map(file => URL.createObjectURL(file));
-      setImages(prev => [...prev, ...imageUrls]);
+      const startIdx = images.length;
+      const urls = files.map(f => URL.createObjectURL(f));
+      setImages(prev => [...prev, ...urls]);
       setResults(prev => [...prev, ...new Array(files.length).fill('')]);
-      setCurrentIndex(startIndex);
-      await concurrentProcess(
-        files,
-        (file, fileIndex) => handleFile(file, startIndex + fileIndex),
-        2
-      );
-    } catch (error) {
-      console.error('处理上传的文件时出错:', error);
-      alert('处理上传的文件时发生错误。请检查文件或稍后重试。');
+      setCurrentIndex(startIdx);
+      await concurrentProcess(files, (file, fileIdx) => handleFile(file, startIdx + fileIdx), 2);
+    } catch (err) {
+      alert('处理上传文件出错');
     } finally {
       setIsLoading(false);
-      if (e && e.target) {
-        e.target.value = null;
-      }
+      if (e.target) e.target.value = null;
     }
   };
 
-  // ====== 图片导航 ======
+  // ====== 导航 ======
   const handlePrevImage = () => {
-    if (currentIndex > 0 && !isLoading && !isStreaming) {
-      setCurrentIndex(currentIndex - 1);
-    }
+    if (currentIndex > 0 && !isLoading && !isStreaming) setCurrentIndex(currentIndex - 1);
   };
   const handleNextImage = () => {
-    if (currentIndex < images.length - 1 && !isLoading && !isStreaming) {
-      setCurrentIndex(currentIndex + 1);
-    }
+    if (currentIndex < images.length - 1 && !isLoading && !isStreaming) setCurrentIndex(currentIndex + 1);
   };
 
-  // ====== 全局拖拽监听 ======
+  // ====== 全局拖拽 ======
   useEffect(() => {
-    const handleGlobalDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) { if (!isDraggingGlobal) { setIsDraggingGlobal(true); } } };
-    const handleGlobalDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
-    const handleGlobalDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!e.relatedTarget || e.relatedTarget === null || e.relatedTarget === document.documentElement) { setIsDraggingGlobal(false); setIsDragging(false); } };
-    const handleGlobalDrop = (e) => { e.preventDefault(); e.stopPropagation(); if (dropZoneRef.current && !dropZoneRef.current.contains(e.target)) { setIsDraggingGlobal(false); setIsDragging(false); } };
-    window.addEventListener('dragenter', handleGlobalDragEnter);
-    window.addEventListener('dragover', handleGlobalDragOver);
-    window.addEventListener('dragleave', handleGlobalDragLeave);
-    window.addEventListener('drop', handleGlobalDrop);
-    return () => { window.removeEventListener('dragenter', handleGlobalDragEnter); window.removeEventListener('dragover', handleGlobalDragOver); window.removeEventListener('dragleave', handleGlobalDragLeave); window.removeEventListener('drop', handleGlobalDrop); };
-  }, [isDraggingGlobal]);
-  const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.types.includes('Files')) { setIsDragging(true); } };
+    const dragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer?.types.includes('Files')) setIsDraggingGlobal(true); };
+    const dragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
+    const dragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!e.relatedTarget || e.relatedTarget === document.documentElement) { setIsDraggingGlobal(false); setIsDragging(false); } };
+    const drop = (e) => { e.preventDefault(); e.stopPropagation(); if (dropZoneRef.current && !dropZoneRef.current.contains(e.target)) { setIsDraggingGlobal(false); setIsDragging(false); } };
+    window.addEventListener('dragenter', dragEnter);
+    window.addEventListener('dragover', dragOver);
+    window.addEventListener('dragleave', dragLeave);
+    window.addEventListener('drop', drop);
+    return () => {
+      window.removeEventListener('dragenter', dragEnter);
+      window.removeEventListener('dragover', dragOver);
+      window.removeEventListener('dragleave', dragLeave);
+      window.removeEventListener('drop', drop);
+    };
+  }, []);
+
+  const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.types.includes('Files')) setIsDragging(true); };
   const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
-  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!dropZoneRef.current.contains(e.relatedTarget)) { setIsDragging(false); } };
+  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!dropZoneRef.current.contains(e.relatedTarget)) setIsDragging(false); };
   const handleDrop = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
     setIsDraggingGlobal(false);
-    const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
-
-    if (files.length === 0) {
-        const items = Array.from(e.dataTransfer.items);
-        const linkPromises = items
-          .filter(item => item.kind === 'string' && (item.type === 'text/uri-list' || item.type === 'text/plain'))
-          .map(item => new Promise(resolve => item.getAsString(resolve)));
-        Promise.all(linkPromises).then(urls => {
-            const firstImageUrl = urls.find(url => url && url.match(/https?:\/\//i) && url.match(/\.(jpg|jpeg|png|gif|webp|avif|bmp|svg)(\?.*)?$/i));
-            if (firstImageUrl) {
-                setImageUrl(firstImageUrl);
-                setShowUrlInput(true);
-            } else if (urls.some(url => url && url.match(/https?:\/\//i))) {
-                alert('拖放的链接不是可识别的图片 URL。');
-            }
-        }).catch(err => {
-            console.error("处理拖放的链接时出错:", err);
-            alert('处理拖放内容时出错。');
-        });
-        return;
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (!files.length) {
+      const items = Array.from(e.dataTransfer.items);
+      const urls = await Promise.all(items.filter(i => i.kind === 'string' && (i.type === 'text/uri-list' || i.type === 'text/plain')).map(i => new Promise(res => i.getAsString(res))));
+      const imgUrl = urls.find(u => u?.match(/\.(jpg|jpeg|png|gif|webp|avif)(\?.*)?$/i));
+      if (imgUrl) { setImageUrl(imgUrl); setShowUrlInput(true); }
+      return;
     }
-
     setIsLoading(true);
     try {
-      const startIndex = images.length;
-      const imageUrls = files.map(file => URL.createObjectURL(file));
-      setImages(prev => [...prev, ...imageUrls]);
+      const startIdx = images.length;
+      const urls = files.map(f => URL.createObjectURL(f));
+      setImages(prev => [...prev, ...urls]);
       setResults(prev => [...prev, ...new Array(files.length).fill('')]);
-      setCurrentIndex(startIndex);
-      await concurrentProcess(
-        files,
-        (file, fileIndex) => handleFile(file, startIndex + fileIndex),
-        2
-      );
-    } catch (error) {
-      console.error('处理拖放的文件时出错:', error);
-      alert('处理拖放的文件时发生错误。');
+      setCurrentIndex(startIdx);
+      await concurrentProcess(files, (file, fileIdx) => handleFile(file, startIdx + fileIdx), 2);
+    } catch (err) {
+      alert('拖放处理失败');
     } finally {
       setIsLoading(false);
     }
@@ -344,171 +313,116 @@ function App() {
     setIsLoading(true);
     setShowUrlInput(false);
     try {
-      let imageBlob;
-      let finalUrl = imageUrl;
+      let blob;
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        const response = await fetch(finalUrl, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!response.ok) throw new Error(`直接获取失败: ${response.status} ${response.statusText}`);
-        imageBlob = await response.blob();
-      } catch (directError) {
-        console.warn("直接获取失败:", directError);
-        const proxyServices = [
-           (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-        ];
-        let proxySuccess = false;
-        for (const getProxyUrl of proxyServices) {
-          const proxyUrl = getProxyUrl(imageUrl);
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
-            const response = await fetch(proxyUrl, { signal: controller.signal });
-            clearTimeout(timeoutId);
-            if (!response.ok) throw new Error(`代理获取失败: ${response.status} ${response.statusText}`);
-            imageBlob = await response.blob();
-            if (!imageBlob.type || !imageBlob.type.startsWith('image/')) {
-                throw new Error(`代理返回的不是有效的图片类型: ${imageBlob.type || '未知类型'}`);
-            }
-            proxySuccess = true;
-            break;
-          } catch (proxyError) {
-            console.warn(`代理获取失败 (${proxyUrl}):`, proxyError);
-          }
-        }
-        if (!proxySuccess) {
-            throw new Error('直接获取和通过代理获取均失败。可能由于 CORS 限制、网络问题或无效链接导致无法加载图片。');
-        }
+        const res = await fetch(imageUrl, { signal: AbortSignal.timeout(10000) });
+        if (!res.ok) throw new Error();
+        blob = await res.blob();
+      } catch {
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
+        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
+        if (!res.ok) throw new Error();
+        blob = await res.blob();
       }
-
-      if (!imageBlob || !imageBlob.type.startsWith('image/')) {
-        throw new Error(`获取到的内容不是有效的图片类型: ${imageBlob.type || '未知类型'}`);
-      }
-      const filename = imageUrl.substring(imageUrl.lastIndexOf('/') + 1).split('?')[0] || 'image_from_url.jpg';
-      const file = new File([imageBlob], filename, { type: imageBlob.type });
-      const imageUrlObject = URL.createObjectURL(file);
-
-      await new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = resolve;
-        img.onerror = (errEvent) => {
-          URL.revokeObjectURL(imageUrlObject);
-          console.error("Image load error from Object URL:", errEvent);
-          reject(new Error('无法从对象 URL 加载图片，可能是无效的图片数据。'));
-        };
-        img.src = imageUrlObject;
-      });
-
+      if (!blob.type.startsWith('image/')) throw new Error('非图片文件');
+      const file = new File([blob], 'url_image.jpg', { type: blob.type });
+      const url = URL.createObjectURL(file);
       const newIndex = images.length;
-      setImages(prev => [...prev, imageUrlObject]);
+      setImages(prev => [...prev, url]);
       setResults(prev => [...prev, '']);
       setCurrentIndex(newIndex);
       await handleFile(file, newIndex);
       setImageUrl('');
-
-    } catch (error) {
-      console.error('从 URL 加载图片时出错:', error);
-      alert(`无法加载图片: ${error.message}\n\n请检查链接是否正确且指向公开可访问的图片文件。\n\n您也可以尝试：\n1. 右键图片另存为后上传\n2. 使用截图工具后粘贴`);
+    } catch (err) {
+      alert(`无法加载图片: ${err.message}`);
       setShowUrlInput(true);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ====== 模态框逻辑 ======
+  // ====== 模态框相关 ======
   const handleImageClick = () => {
     if (!images[currentIndex]) return;
     setModalPosition({ x: 0, y: 0 });
     setModalScale(1);
     setShowModal(true);
   };
-  const handleCloseModal = () => {
-    setShowModal(false);
-  };
+  const handleCloseModal = () => setShowModal(false);
 
-  // ====== 复制 ======
   const handleCopyText = () => {
-    if (editText != null && !isStreaming) {
-        const plainText = editText
-            .replace(/(\*\*|__)(.*?)\1/g, '$2')
-            .replace(/(\*|_)(.*?)\1/g, '$2')
-            .replace(/\n{2,}/g, '\n');
-
-        navigator.clipboard.writeText(plainText.trim())
-            .then(() => {
-                const button = document.querySelector('.copy-button');
-                if (button) {
-                    button.textContent = '已复制';
-                    button.classList.add('copied');
-                    setTimeout(() => {
-                        button.textContent = '复制内容';
-                        button.classList.remove('copied');
-                    }, 1500);
-                }
-            })
-            .catch(err => {
-                console.error('复制失败:', err);
-                alert('复制失败，您的浏览器可能不支持或权限不足，请尝试手动复制。');
-            });
-    }
+    if (!editText || isStreaming) return;
+    const plain = editText.replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(\*|_)(.*?)\1/g, '$2');
+    navigator.clipboard.writeText(plain.trim()).then(() => {
+      const btn = document.querySelector('.copy-button');
+      if (btn) { btn.textContent = '已复制'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = '复制内容'; btn.classList.remove('copied'); }, 1500); }
+    }).catch(() => alert('复制失败'));
   };
 
-  // ====== 编辑器处理 ======
   const handleInput = (e) => {
-      const currentHtml = e.currentTarget.innerHTML;
-      const newMarkdown = turndownService.turndown(currentHtml);
-      setEditText(newMarkdown);
-      setResults(prevResults => {
-          const newResults = [...prevResults];
-          if (currentIndex < newResults.length) {
-              newResults[currentIndex] = newMarkdown;
-          }
-          return newResults;
-      });
+    const html = e.currentTarget.innerHTML;
+    const newMd = turndownService.turndown(html);
+    setEditText(newMd);
+    setResults(prev => { const u = [...prev]; u[currentIndex] = newMd; return u; });
   };
 
   const handleManualCopy = (e) => {
     e.preventDefault();
-    const selection = window.getSelection();
-    if (!selection.rangeCount) return;
-    const selectedText = selection.toString();
-    const normalizedText = selectedText
-        .replace(/(\*\*|__)(.*?)\1/g, '$2')
-        .replace(/(\*|_)(.*?)\1/g, '$2')
-        .replace(/\n{3,}/g, '\n\n');
-    e.clipboardData.setData('text/plain', normalizedText);
+    const sel = window.getSelection().toString();
+    const plain = sel.replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(\*|_)(.*?)\1/g, '$2');
+    e.clipboardData.setData('text/plain', plain);
   };
 
   useEffect(() => {
-      if (isStreaming) return;
-      const currentMarkdown = results[currentIndex] || '';
-      setEditText(currentMarkdown);
-      if (editDivRef.current) {
-          const editorMarkdown = turndownService.turndown(editDivRef.current.innerHTML);
-          if (editorMarkdown !== currentMarkdown) {
-              const rawHtml = marked.parse(currentMarkdown, { breaks: true });
-              const safeHtml = DOMPurify.sanitize(rawHtml);
-              editDivRef.current.innerHTML = safeHtml;
-          }
-      }
+    if (isStreaming) return;
+    const md = results[currentIndex] || '';
+    setEditText(md);
+    if (editDivRef.current) {
+      const html = marked.parse(md, { breaks: true });
+      editDivRef.current.innerHTML = DOMPurify.sanitize(html);
+    }
   }, [currentIndex, results, isStreaming]);
 
-  const handleModalMouseDown = (e) => { if (e.target.classList.contains('modal-close') || e.button !== 0) { return; } const isTouchEvent = e.touches && e.touches.length > 0; const clientX = isTouchEvent ? e.touches[0].clientX : e.clientX; const clientY = isTouchEvent ? e.touches[0].clientY : e.clientY; e.preventDefault(); setIsDraggingModal(true); setModalOffset({ x: clientX - modalPosition.x, y: clientY - modalPosition.y, }); const modalContent = e.currentTarget; if (modalContent) { modalContent.style.cursor = 'grabbing'; modalContent.style.transition = 'none'; } };
-  const handleModalWheel = (e) => { e.preventDefault(); const zoomSensitivity = 0.0005; const minScale = 0.1; const maxScale = 10; const scaleChange = -e.deltaY * zoomSensitivity * modalScale; setModalScale(prevScale => { let newScale = prevScale + scaleChange; newScale = Math.max(minScale, Math.min(newScale, maxScale)); return newScale; }); if (e.currentTarget) { e.currentTarget.style.transition = 'transform 0.1s ease-out'; } };
+  const handleModalMouseDown = (e) => {
+    if (e.target.classList.contains('modal-close') || e.button !== 0) return;
+    const clientX = e.touches?.[0]?.clientX ?? e.clientX;
+    const clientY = e.touches?.[0]?.clientY ?? e.clientY;
+    setIsDraggingModal(true);
+    setModalOffset({ x: clientX - modalPosition.x, y: clientY - modalPosition.y });
+  };
+  const handleModalWheel = (e) => {
+    e.preventDefault();
+    const delta = -e.deltaY * 0.0005 * modalScale;
+    setModalScale(prev => Math.max(0.1, Math.min(10, prev + delta)));
+  };
   useEffect(() => {
-    const handleMove = (e) => { const isTouchEvent = e.touches && e.touches.length > 0; const clientX = isTouchEvent ? e.touches[0].clientX : e.clientX; const clientY = isTouchEvent ? e.touches[0].clientY : e.clientY; setModalPosition({ x: clientX - modalOffset.x, y: clientY - modalOffset.y, }); };
-    const handleEnd = () => { setIsDraggingModal(false); const modalContent = document.querySelector('.modal-content'); if (modalContent) { modalContent.style.cursor = 'grab'; modalContent.style.transition = 'transform 0.1s ease-out'; } };
-    if (isDraggingModal) { window.addEventListener('mousemove', handleMove, { capture: true }); window.addEventListener('mouseup', handleEnd, { capture: true }); window.addEventListener('touchmove', handleMove, { passive: false }); window.addEventListener('touchend', handleEnd); }
-    return () => { window.removeEventListener('mousemove', handleMove, { capture: true }); window.removeEventListener('mouseup', handleEnd, { capture: true }); window.removeEventListener('touchmove', handleMove); window.removeEventListener('touchend', handleEnd); };
+    const move = (e) => {
+      if (!isDraggingModal) return;
+      const clientX = e.touches?.[0]?.clientX ?? e.clientX;
+      const clientY = e.touches?.[0]?.clientY ?? e.clientY;
+      setModalPosition({ x: clientX - modalOffset.x, y: clientY - modalOffset.y });
+    };
+    const end = () => setIsDraggingModal(false);
+    if (isDraggingModal) {
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', end);
+      window.addEventListener('touchmove', move, { passive: false });
+      window.addEventListener('touchend', end);
+    }
+    return () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', end);
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('touchend', end);
+    };
   }, [isDraggingModal, modalOffset]);
 
-  // ====== 渲染（完全保留原结构） ======
+  // ====== 渲染 ======
   return (
     <div className="app">
       <header>
         <a
-          href="https://github.com/kayaladream/GeminiOCR"
+          href="https://github.com/kayaladream/PaddleOCR"
           target="_blank"
           rel="noopener noreferrer"
           className="github-link"
@@ -541,50 +455,34 @@ function App() {
               <label className="upload-button" htmlFor="file-input">
                 {images.length > 0 ? '添加新的图片' : '上传图片'}
               </label>
-              <input
-                id="file-input" type="file" accept="image/*" onChange={handleImageUpload} multiple hidden aria-hidden="true"
-              />
-              <button
-                type="button" className="url-button" onClick={() => setShowUrlInput(!showUrlInput)} aria-expanded={showUrlInput}
-              >
+              <input id="file-input" type="file" accept="image/*" onChange={handleImageUpload} multiple hidden />
+              <button type="button" className="url-button" onClick={() => setShowUrlInput(!showUrlInput)}>
                 {showUrlInput ? '取消链接输入' : '使用链接上传'}
               </button>
             </div>
             {showUrlInput && (
               <form onSubmit={handleUrlSubmit} className="url-form">
-                <input
-                  type="url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="粘贴图片链接 (URL)" className="url-input" required aria-label="图片链接输入框"
-                />
+                <input type="url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="粘贴图片链接 (URL)" className="url-input" required />
                 <button type="submit" className="url-submit">确认</button>
               </form>
             )}
-            {!images.length && !isDragging && !showUrlInput && (
-              <p className="upload-hint">或将图片拖放到此处 / 粘贴图片</p>
-            )}
-            {isDragging && (
-              <div className="dragging-overlay-text">松开即可上传图片</div>
-            )}
+            {!images.length && !isDragging && !showUrlInput && <p className="upload-hint">或将图片拖放到此处 / 粘贴图片</p>}
+            {isDragging && <div className="dragging-overlay-text">松开即可上传图片</div>}
           </div>
-          {isDraggingGlobal && (
-            <div className="drag-overlay active"></div>
-          )}
+          {isDraggingGlobal && <div className="drag-overlay active"></div>}
           {images.length > 0 && (
             <div className="images-preview">
               <div className="image-navigation">
-                <button onClick={handlePrevImage} disabled={currentIndex === 0 || isLoading || isStreaming} className="nav-button" aria-label="上一张图片">←</button>
-                <span className="image-counter" aria-live="polite">{currentIndex + 1} / {images.length}</span>
-                <button onClick={handleNextImage} disabled={currentIndex === images.length - 1 || isLoading || isStreaming} className="nav-button" aria-label="下一张图片">→</button>
+                <button onClick={handlePrevImage} disabled={currentIndex === 0 || isLoading || isStreaming} className="nav-button">←</button>
+                <span className="image-counter">{currentIndex + 1} / {images.length}</span>
+                <button onClick={handleNextImage} disabled={currentIndex === images.length - 1 || isLoading || isStreaming} className="nav-button">→</button>
               </div>
               <div className={`image-preview ${isLoading && !results[currentIndex] ? 'loading' : ''}`}>
                 <img
                   key={images[currentIndex]} src={images[currentIndex]} alt={`预览 ${currentIndex + 1}`} onClick={handleImageClick} style={{ cursor: images[currentIndex] ? 'zoom-in' : 'default' }}
                   onError={(e) => { console.error("加载图片失败:", images[currentIndex]); e.target.alt = '图片加载失败'; e.target.style.display = 'none'; e.target.closest('.image-preview')?.classList.add('load-error'); }}
                 />
-                {isLoading && !results[currentIndex] &&
-                  <div className="loading-overlay">
-                    {isStreaming ? '识别中...' : (isLoading ? '处理中...' : '')}
-                  </div>
-                }
+                {isLoading && !results[currentIndex] && <div className="loading-overlay">{isStreaming ? '识别中...' : '处理中...'}</div>}
               </div>
             </div>
           )}
@@ -592,26 +490,20 @@ function App() {
 
         {(images.length > 0 || isLoading || isStreaming) && (
           <div className="result-section">
-            <div className="result-container" ref={resultRef}>
-              {isLoading && !isStreaming && results[currentIndex] == null &&
-                <div className="loading result-loading">等待识别...</div>
-              }
+            <div className="result-container">
+              {isLoading && !isStreaming && results[currentIndex] == null && <div className="loading result-loading">等待识别...</div>}
 
               {isStreaming && (
                 <div className="result-text">
-                  <div className="result-header">
-                    <span aria-live="polite">
-                      第 {currentIndex + 1} 张图片的识别结果 (识别中...)
-                    </span>
-                  </div>
+                  <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...)</span></div>
                   <div className="gradient-text">
                     <ReactMarkdown
                       remarkPlugins={[remarkMath]}
                       rehypePlugins={[rehypeKatex]}
                       components={{
-                        table: ({ node, ...props }) => (<div style={{ overflowX: 'auto', maxWidth: '100%' }}><table className="markdown-table" {...props} /></div>),
-                        th: ({ node, ...props }) => (<th className="markdown-th" {...props} />),
-                        td: ({ node, ...props }) => (<td className="markdown-td" {...props} />),
+                        table: ({node, ...props}) => (<div style={{overflowX:'auto', maxWidth:'100%'}}><table className="markdown-table" {...props} /></div>),
+                        th: ({node, ...props}) => <th className="markdown-th" {...props} />,
+                        td: ({node, ...props}) => <td className="markdown-td" {...props} />,
                       }}
                     >
                       {streamingText}
@@ -624,29 +516,16 @@ function App() {
                 <div className="result-text editing-area">
                   <div className="result-header">
                     <span>编辑第 {currentIndex + 1} 张图片的结果</span>
-                    <div>
-                      <button className="copy-button" onClick={handleCopyText}>复制内容</button>
-                    </div>
+                    <button className="copy-button" onClick={handleCopyText}>复制内容</button>
                   </div>
-                  <div
-                    ref={editDivRef}
-                    contentEditable={true}
-                    className="edit-content-editable"
-                    onInput={handleInput}
-                    onCopy={handleManualCopy}
-                    suppressContentEditableWarning={true}
-                    aria-label={`编辑识别结果 ${currentIndex + 1}`}
-                    spellCheck="false"
-                  />
+                  <div ref={editDivRef} contentEditable={true} className="edit-content-editable" onInput={handleInput} onCopy={handleManualCopy}
+                       suppressContentEditableWarning={true} aria-label={`编辑识别结果 ${currentIndex + 1}`} spellCheck="false" />
                 </div>
               )}
 
               {!isLoading && !isStreaming && results[currentIndex] == null && images.length > 0 && (
                 <div className="result-placeholder">
-                  <span style={{ fontSize: '1.1em', fontWeight: 'bold' }}>⚠️ 系统提示</span>
-                  <br />
-                  <br />
-                  当前图片状态异常，暂无识别结果或由于网络中断导致失败，请尝试重新点击上传。
+                  <span style={{fontWeight:'bold'}}>⚠️ 系统提示</span><br /><br />当前图片状态异常，暂无识别结果或由于网络中断导致失败，请尝试重新点击上传。
                 </div>
               )}
             </div>
@@ -670,10 +549,7 @@ function App() {
             }}
           >
             <img src={images[currentIndex]} alt="放大预览" draggable="false" style={{ pointerEvents: 'none', userSelect: 'none' }} />
-            <button
-              className="modal-close" aria-label="关闭预览" onClick={handleCloseModal}
-              onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}
-            >×</button>
+            <button className="modal-close" onClick={handleCloseModal} onMouseDown={(e) => e.stopPropagation()}>×</button>
           </div>
         </div>
       )}
