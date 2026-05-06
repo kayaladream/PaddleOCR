@@ -14,15 +14,16 @@
 
 ## 实际效果
 <div align="center">
-  <img width="1168" height="776" alt="8adb35ab-9891-42e0-98b3-bd5122bfcf3e" src="https://github.com/user-attachments/assets/924524fd-9e27-4cf5-abd9-b672f46e60e4" />
+  <img width="1166" height="775" alt="9c2efa22-1a58-4a68-be8d-c238e8146d86" src="https://github.com/user-attachments/assets/9ab0353a-01e1-4f16-93d4-4228ad749131" />
   <br>
   <small>手写稿的识别</small>
 </div>
 <br>
 <div align="center">
-  <img width="1168" height="776" alt="8cf2e943-71aa-4e42-812a-64295e03eee5" src="https://github.com/user-attachments/assets/595891c8-d847-4326-8ee2-6e9075c5cce3" />
+  <img width="1168" height="776" alt="5acc1e00-03fd-41eb-92ad-473a28295ca8" src="https://github.com/user-attachments/assets/81b0f3a6-3b4f-46f1-ac73-d8c08b4d0855" />
   <br>
   <small>表格的识别</small>
+</div>
 
 ## 完全免费
 使用百度 PaddleOCR 免费 API token
