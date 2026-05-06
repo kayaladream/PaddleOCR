@@ -1,4 +1,3 @@
-```markdown
 # 基于 PaddleOCR-VL 的智能 OCR 系统
 
 ## 项目概述
