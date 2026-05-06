@@ -33,7 +33,7 @@
     color: rgba(29, 29, 31, 0);
     -webkit-text-fill-color: rgba(29, 29, 31, 0);
     /* 采用你提供的精准RGB渐变色 */
-    background: linear-gradient(90deg, rgb(1, 155, 255), rgb(23, 50, 224), rgb(116, 39, 229));
+    background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
     -webkit-background-clip: text;
     background-clip: text;
   }
@@ -94,10 +94,11 @@ header h1 {
   font-size: 2.2rem;
   font-weight: 700;
   /* 标题颜色 */
-  background: linear-gradient(90deg, rgb(19, 163, 255) 0%, rgb(11, 93, 237) 50%, rgb(116, 39, 229) 100%);
-  -webkit-background-clip: text;
+  background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
   background-clip: text;
-  -webkit-text-fill-color: transparent;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: rgba(0, 0, 0, 0);
+  
   margin-bottom: 0.5rem;
   letter-spacing: 1px;
 }
@@ -121,7 +122,7 @@ header p {
 
 .upload-button {
   /* 按钮背景精准渐变 */
-  background: linear-gradient(90deg, rgb(1, 155, 255) 0%, rgb(23, 50, 224) 50%, rgb(116, 39, 229) 100%);
+  background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
   background-size: 150% 100%;
   color: white;
   padding: 1rem 2.5rem;
@@ -311,7 +312,7 @@ header p {
   opacity: 0;
   animation: smoothReveal 1s ease-out forwards;
   animation-delay: calc(var(--index) * 50ms);
-  background: linear-gradient(90deg, rgb(1, 155, 255), rgb(23, 50, 224), rgb(116, 39, 229));
+  background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
   background-size: 300% 100%;
   -webkit-background-clip: text;
   background-clip: text;
