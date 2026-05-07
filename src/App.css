@@ -975,9 +975,15 @@ main.has-content {
   z-index: 50; 
 }
 
-/* 当进入有图片/识别页时，缩小顶部间距使其更精致紧凑 */
 .upload-section.with-image .model-selector-container {
   margin-top: 0.5rem;
+}
+
+/* ===== 新增包裹层样式 ===== */
+.model-selector-wrapper {
+  display: flex;
+  align-items: center;
+  position: relative; /* 下拉框以这个 wrapper 为基准，从而覆盖掉左边的文字 */
 }
 
 .model-label-outside {
@@ -989,19 +995,19 @@ main.has-content {
 
 .model-selector {
   position: relative;
-  min-width: 260px; /* 框体宽度 */
+  min-width: 260px;
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(23, 50, 224, 0.15);
   border-radius: 8px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
   user-select: none;
+  cursor: pointer;
 }
 
 .model-selector-header {
   display: flex;
   align-items: center;
   padding: 10px 16px;
-  cursor: pointer;
   border-radius: 8px;
   transition: background 0.2s;
 }
@@ -1033,8 +1039,9 @@ main.has-content {
 .model-dropdown-list {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0;
-  width: 100%;
+  left: 0; /* 对齐 Wrapper 的最左侧，即从“选择模型”处开始对齐 */
+  width: 100%; /* 宽度撑满整个 Wrapper (字样 + 框体) */
+  min-width: 350px; /* 保证有一个充足的最低宽度 */
   background: #fff;
   border: 1px solid rgba(23, 50, 224, 0.15);
   border-radius: 8px;
