@@ -13,28 +13,28 @@ const MODELS =[
   {
     id: 'baidu-vl-1.5',
     name: 'PaddleOCR-VL-1.5',
-    badge: 'pp.png',
+    badge: 'pp.svg',
     desc: '突破扭曲倾斜，多模态行业SOTA',
     channel: 'baidu'
   },
   {
     id: 'baidu-ocrv5',
     name: 'PP-OCRv5',
-    badge: 'pp.png',
+    badge: 'pp.svg',
     desc: '超轻量文字识别，又快又准',
     channel: 'baidu'
   },
   {
     id: 'baidu-structurev3',
     name: 'PP-StructureV3',
-    badge: 'pp.png',
+    badge: 'pp.svg',
     desc: '通用文档解析，高精度零幻觉',
     channel: 'baidu'
   },
   {
     id: 'sili-vl-1.5',
     name: 'PaddleOCR-VL-1.5',
-    badge: 'sili.png',
+    badge: 'sili.svg',
     desc: '硅基流动加速的业界SOTA文档大模型',
     channel: 'silicon',
     apiName: 'PaddlePaddle/PaddleOCR-VL-1.5'
@@ -42,25 +42,23 @@ const MODELS =[
   {
     id: 'sili-deepseek',
     name: 'DeepSeek-OCR',
-    badge: 'sili.png',
+    badge: 'sili.svg',
     desc: '深度求索推出的顶尖视觉文字识别模型',
     channel: 'silicon',
     apiName: 'deepseek-ai/DeepSeek-OCR'
   }
 ];
 
-// ====== 预处理：清理 Markdown，修复上标等常见误转 ======
+// ====== 预处理：清理 Markdown ======
 const preprocessText = (text) => {
   if (!text) return '';
 
-  // 保存表格
-  const tables = [];
+  const tables =[];
   text = text.replace(/\|[^\n]+\|\n\|[-|\s]+\|(?:\n\|[^\n]+\|)+/g, (match) => {
     tables.push(match);
     return `__TABLE_${tables.length - 1}__`;
   });
 
-  // 基础清理
   text = text.replace(/\\\\\(/g, '$');
   text = text.replace(/\\\\\)/g, '$');
   text = text.replace(/\\\\\[/g, '$$');
@@ -81,7 +79,6 @@ const preprocessText = (text) => {
   text = text.replace(/#\s+/g, '#');
   text = text.replace(/\n{2,}/g, '\n\n');
 
-  // 常见上标/下标误转
   text = text.replace(/\s*\$\^\{([^}]+)\}\$\s*/g, (match, exponent) => {
     const superscripts = {
       '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
@@ -91,16 +88,13 @@ const preprocessText = (text) => {
     if (exponent in superscripts) {
       return superscripts[exponent];
     }
-    return '^' + exponent; // 其他未知上标保留 ^ 形式
+    return '^' + exponent;
   });
 
-  // 恢复表格
   text = text.replace(/__TABLE_(\d+)__/g, (_, i) => `\n\n${tables[parseInt(i)]}\n\n`);
-
   return text.trim();
 };
 
-// ====== File → base64 ======
 const fileToBase64 = (file) => {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -109,7 +103,6 @@ const fileToBase64 = (file) => {
   });
 };
 
-// ====== Turndown ======
 const turndownService = new TurndownService({
   headingStyle: 'atx',
   hr: '---',
@@ -145,27 +138,25 @@ function App() {
   const [results, setResults] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const[isDraggingGlobal, setIsDraggingGlobal] = useState(false);
+  const[isDragging, setIsDragging] = useState(false);
+  const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
   const dropZoneRef = useRef(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
-  const[imageUrl, setImageUrl] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const[streamingText, setStreamingText] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const[showModal, setShowModal] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const [isDraggingModal, setIsDraggingModal] = useState(false);
-  const[modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
-  const[modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
-  const[modalScale, setModalScale] = useState(1);
-  const [editText, setEditText] = useState('');
+  const[isDraggingModal, setIsDraggingModal] = useState(false);
+  const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
+  const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
+  const [modalScale, setModalScale] = useState(1);
+  const[editText, setEditText] = useState('');
   const editDivRef = useRef(null);
   
-  // 模型选择状态
-  const [selectedModel, setSelectedModel] = useState(MODELS[0]);
+  const[selectedModel, setSelectedModel] = useState(MODELS[0]);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
 
-  // 点击空白处关闭模型下拉框
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -176,7 +167,6 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   },[]);
 
-  // ====== 打字机流式效果 ======
   const typewriterEffect = useCallback((fullText, index) => {
     let pos = 0;
     const speed = 15;
@@ -198,7 +188,6 @@ function App() {
     return () => clearInterval(timer);
   },[]);
 
-  // ====== 处理单张图片 (包含备用模型重试逻辑) ======
   const handleFile = useCallback(async (file, index) => {
     if (!file.type.startsWith('image/')) return;
 
@@ -206,7 +195,7 @@ function App() {
       setIsStreaming(true);
       setStreamingText('');
       setResults(prev => {
-        const newResults = [...prev];
+        const newResults =[...prev];
         newResults[index] = '';
         return newResults;
       });
@@ -216,9 +205,6 @@ function App() {
       let response;
       let isFallback = false;
 
-      // --- 第1次请求：使用当前选中的模型 ---
-      // 请在 Vercel 后的端 api/recognize 中解析这些参数：modelId, channel, apiName
-      // 并在检测到 channel === 'silicon' 时，使用 process.env.SILICON_TOKEN 去请求硅基流动
       response = await fetch('/api/recognize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -231,9 +217,7 @@ function App() {
         }),
       });
 
-      // --- 异常处理与降级回退 ---
       if (!response.ok) {
-        // 当使用的是百度的 PaddleOCR-VL-1.5 时，触发自动备用逻辑
         if (selectedModel.id === 'baidu-vl-1.5') {
           isFallback = true;
           const warningMsg = "> ⚠️ **系统提示：百度模型调用失败，正在自动切换至硅基流动模型重试...**\n\n";
@@ -244,7 +228,6 @@ function App() {
             return updated;
           });
 
-          // 自动切换为硅基流动的 PaddleOCR-VL-1.5
           const fallbackModel = MODELS.find(m => m.id === 'sili-vl-1.5');
           response = await fetch('/api/recognize', {
             method: 'POST',
@@ -263,7 +246,6 @@ function App() {
             throw new Error(errorData.error || '硅基流动模型备用重试也失败了');
           }
         } else {
-          // 其他模型失败直接抛出异常
           const errorData = await response.json().catch(() => ({ error: '请求失败' }));
           throw new Error(errorData.error || '服务异常');
         }
@@ -271,8 +253,6 @@ function App() {
 
       const data = await response.json();
       const finalText = preprocessText(data.text || '');
-      
-      // 如果触发了备用模型，文本前沿保留提示
       const finalPrefix = isFallback ? "> ⚠️ **系统提示：百度模型调用失败，已自动切换至硅基流动模型完成识别**\n\n" : "";
       
       typewriterEffect(finalPrefix + finalText, index);
@@ -280,7 +260,7 @@ function App() {
       console.error('识别失败:', error);
       const errMsg = `> ⚠️ **系统提示：图片处理失败**\n>\n> ${error.message}`;
       setResults(prev => {
-        const updated = [...prev];
+        const updated =[...prev];
         updated[index] = errMsg;
         return updated;
       });
@@ -289,7 +269,6 @@ function App() {
     }
   }, [typewriterEffect, selectedModel]);
 
-  // ====== 并发控制 ======
   const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
     const queue =[...items.entries()];
     const workers = new Array(maxConcurrent).fill().map(async () => {
@@ -301,7 +280,6 @@ function App() {
     await Promise.all(workers);
   };
 
-  // ====== 粘贴监听 ======
   useEffect(() => {
     const handlePaste = async (e) => {
       if (editDivRef.current?.contains(e.target) || showModal) return;
@@ -334,7 +312,6 @@ function App() {
     return () => document.removeEventListener('paste', handlePaste);
   },[images.length, handleFile, showModal]);
 
-  // ====== 文件上传 ======
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -354,7 +331,6 @@ function App() {
     }
   };
 
-  // ====== 导航 ======
   const handlePrevImage = () => {
     if (currentIndex > 0 && !isLoading && !isStreaming) setCurrentIndex(currentIndex - 1);
   };
@@ -362,7 +338,6 @@ function App() {
     if (currentIndex < images.length - 1 && !isLoading && !isStreaming) setCurrentIndex(currentIndex + 1);
   };
 
-  // ====== 全局拖拽 ======
   useEffect(() => {
     const dragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer?.types.includes('Files')) setIsDraggingGlobal(true); };
     const dragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
@@ -401,7 +376,7 @@ function App() {
       const startIdx = images.length;
       const urls = files.map(f => URL.createObjectURL(f));
       setImages(prev => [...prev, ...urls]);
-      setResults(prev => [...prev, ...new Array(files.length).fill('')]);
+      setResults(prev =>[...prev, ...new Array(files.length).fill('')]);
       setCurrentIndex(startIdx);
       await concurrentProcess(files, (file, fileIdx) => handleFile(file, startIdx + fileIdx), 2);
     } catch (err) {
@@ -411,7 +386,6 @@ function App() {
     }
   };
 
-  // ====== URL 上传 ======
   const handleUrlSubmit = async (e) => {
     e.preventDefault();
     if (!imageUrl) return;
@@ -433,7 +407,7 @@ function App() {
       const file = new File([blob], 'url_image.jpg', { type: blob.type });
       const url = URL.createObjectURL(file);
       const newIndex = images.length;
-      setImages(prev => [...prev, url]);
+      setImages(prev =>[...prev, url]);
       setResults(prev => [...prev, '']);
       setCurrentIndex(newIndex);
       await handleFile(file, newIndex);
@@ -446,7 +420,6 @@ function App() {
     }
   };
 
-  // ====== 模态框相关 ======
   const handleImageClick = () => {
     if (!images[currentIndex]) return;
     setModalPosition({ x: 0, y: 0 });
@@ -488,7 +461,7 @@ function App() {
         editDivRef.current.innerHTML = DOMPurify.sanitize(html);
       }
     }
-  }, [currentIndex, results, isStreaming]);
+  },[currentIndex, results, isStreaming]);
 
   const handleModalMouseDown = (e) => {
     if (e.target.classList.contains('modal-close') || e.button !== 0) return;
@@ -524,7 +497,6 @@ function App() {
     };
   },[isDraggingModal, modalOffset]);
 
-  // ====== 渲染 ======
   return (
     <div className="app">
       <header>
@@ -577,11 +549,19 @@ function App() {
               </button>
             </div>
 
-            {/* ====== 模型选择器 ====== */}
+            {showUrlInput && (
+              <form onSubmit={handleUrlSubmit} className="url-form">
+                <input type="url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="粘贴图片链接 (URL)" className="url-input" required />
+                <button type="submit" className="url-submit">确认</button>
+              </form>
+            )}
+
+            {!images.length && !isDragging && !showUrlInput && <p className="upload-hint">或将图片拖放到此处 / 粘贴图片</p>}
+            
             <div className="model-selector-container">
+              <span className="model-label-outside">选择模型</span>
               <div className="model-selector" ref={dropdownRef}>
                 <div className="model-selector-header" onClick={(e) => { e.stopPropagation(); setShowDropdown(!showDropdown); }}>
-                  <span className="model-label">选择模型</span>
                   <span className="model-current-name">{selectedModel.name}</span>
                   {selectedModel.badge && <img src={selectedModel.badge} alt="badge" className="model-badge" />}
                   <span className="model-arrow" style={{ transform: showDropdown ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
@@ -591,7 +571,7 @@ function App() {
                     {MODELS.map(model => (
                       <div
                         key={model.id}
-                        className={`model-dropdown-item ${selectedModel.id === model.id ? 'active' : ''}`}
+                        className="model-dropdown-item"
                         onClick={(e) => { e.stopPropagation(); setSelectedModel(model); setShowDropdown(false); }}
                       >
                         <div className="model-item-top">
@@ -606,13 +586,6 @@ function App() {
               </div>
             </div>
 
-            {showUrlInput && (
-              <form onSubmit={handleUrlSubmit} className="url-form">
-                <input type="url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="粘贴图片链接 (URL)" className="url-input" required />
-                <button type="submit" className="url-submit">确认</button>
-              </form>
-            )}
-            {!images.length && !isDragging && !showUrlInput && <p className="upload-hint">或将图片拖放到此处 / 粘贴图片</p>}
             {isDragging && <div className="dragging-overlay-text">松开即可上传图片</div>}
           </div>
           {isDraggingGlobal && <div className="drag-overlay active"></div>}
