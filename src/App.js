@@ -13,28 +13,28 @@ const MODELS =[
   {
     id: 'baidu-vl-1.5',
     name: 'PaddleOCR-VL-1.5',
-    badge: 'pp.svg',
+    badge: 'pp.png',
     desc: '突破扭曲倾斜，多模态行业SOTA',
     channel: 'baidu'
   },
   {
     id: 'baidu-ocrv5',
     name: 'PP-OCRv5',
-    badge: 'pp.svg',
+    badge: 'pp.png',
     desc: '超轻量文字识别，又快又准',
     channel: 'baidu'
   },
   {
     id: 'baidu-structurev3',
     name: 'PP-StructureV3',
-    badge: 'pp.svg',
+    badge: 'pp.png',
     desc: '通用文档解析，高精度零幻觉',
     channel: 'baidu'
   },
   {
     id: 'sili-vl-1.5',
     name: 'PaddleOCR-VL-1.5',
-    badge: 'sili.svg',
+    badge: 'sili.png',
     desc: '硅基流动加速的业界SOTA文档大模型',
     channel: 'silicon',
     apiName: 'PaddlePaddle/PaddleOCR-VL-1.5'
@@ -42,7 +42,7 @@ const MODELS =[
   {
     id: 'sili-deepseek',
     name: 'DeepSeek-OCR',
-    badge: 'sili.svg',
+    badge: 'sili.png',
     desc: '深度求索推出的顶尖视觉文字识别模型',
     channel: 'silicon',
     apiName: 'deepseek-ai/DeepSeek-OCR'
@@ -559,13 +559,17 @@ function App() {
             {!images.length && !isDragging && !showUrlInput && <p className="upload-hint">或将图片拖放到此处 / 粘贴图片</p>}
             
             <div className="model-selector-container">
-              <span className="model-label-outside">选择模型</span>
-              <div className="model-selector" ref={dropdownRef}>
-                <div className="model-selector-header" onClick={(e) => { e.stopPropagation(); setShowDropdown(!showDropdown); }}>
-                  <span className="model-current-name">{selectedModel.name}</span>
-                  {selectedModel.badge && <img src={selectedModel.badge} alt="badge" className="model-badge" />}
-                  <span className="model-arrow" style={{ transform: showDropdown ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+              {/* 新增包裹层 Wrapper，用作下拉框的对齐锚点 */}
+              <div className="model-selector-wrapper" ref={dropdownRef}>
+                <span className="model-label-outside">选择模型</span>
+                <div className="model-selector" onClick={(e) => { e.stopPropagation(); setShowDropdown(!showDropdown); }}>
+                  <div className="model-selector-header">
+                    <span className="model-current-name">{selectedModel.name}</span>
+                    {selectedModel.badge && <img src={selectedModel.badge} alt="badge" className="model-badge" />}
+                    <span className="model-arrow" style={{ transform: showDropdown ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+                  </div>
                 </div>
+                {/* 列表将会相对于整个 Wrapper 定位 */}
                 {showDropdown && (
                   <div className="model-dropdown-list">
                     {MODELS.map(model => (
