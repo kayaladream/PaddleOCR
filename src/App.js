@@ -1,3 +1,4 @@
+--- START OF FILE App.js ---
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import 'katex/dist/katex.min.css';
 import ReactMarkdown from 'react-markdown';
@@ -7,6 +8,47 @@ import { marked } from 'marked';
 import TurndownService from 'turndown';
 import DOMPurify from 'dompurify';
 import './App.css';
+
+// ====== 模型列表定义 ======
+const MODELS =[
+  {
+    id: 'baidu-vl-1.5',
+    name: 'PaddleOCR-VL-1.5',
+    badge: 'pp.png',
+    desc: '突破扭曲倾斜，多模态行业SOTA',
+    channel: 'baidu'
+  },
+  {
+    id: 'baidu-ocrv5',
+    name: 'PP-OCRv5',
+    badge: 'pp.png',
+    desc: '超轻量文字识别，又快又准',
+    channel: 'baidu'
+  },
+  {
+    id: 'baidu-structurev3',
+    name: 'PP-StructureV3',
+    badge: 'pp.png',
+    desc: '通用文档解析，高精度零幻觉',
+    channel: 'baidu'
+  },
+  {
+    id: 'sili-vl-1.5',
+    name: 'PaddleOCR-VL-1.5',
+    badge: 'sili.png',
+    desc: '硅基流动加速的业界SOTA文档大模型',
+    channel: 'silicon',
+    apiName: 'PaddlePaddle/PaddleOCR-VL-1.5'
+  },
+  {
+    id: 'sili-deepseek',
+    name: 'DeepSeek-OCR',
+    badge: 'sili.png',
+    desc: '深度求索推出的顶尖视觉文字识别模型',
+    channel: 'silicon',
+    apiName: 'deepseek-ai/DeepSeek-OCR'
+  }
+];
 
 // ====== 预处理：清理 Markdown，修复上标等常见误转 ======
 const preprocessText = (text) => {
@@ -100,24 +142,40 @@ turndownService.addRule('katex', {
 });
 
 function App() {
-  const[images, setImages] = useState([]);
+  const [images, setImages] = useState([]);
   const [results, setResults] = useState([]);
-  const[currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
+  const[isDraggingGlobal, setIsDraggingGlobal] = useState(false);
   const dropZoneRef = useRef(null);
-  const[showUrlInput, setShowUrlInput] = useState(false);
-  const [imageUrl, setImageUrl] = useState('');
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const[imageUrl, setImageUrl] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [streamingText, setStreamingText] = useState('');
+  const[streamingText, setStreamingText] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const[isDraggingModal, setIsDraggingModal] = useState(false);
-  const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
-  const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
-  const [modalScale, setModalScale] = useState(1);
+  const [isDraggingModal, setIsDraggingModal] = useState(false);
+  const[modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
+  const[modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
+  const[modalScale, setModalScale] = useState(1);
   const [editText, setEditText] = useState('');
   const editDivRef = useRef(null);
+  
+  // 模型选择状态
+  const [selectedModel, setSelectedModel] = useState(MODELS[0]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // 点击空白处关闭模型下拉框
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  },[]);
 
   // ====== 打字机流式效果 ======
   const typewriterEffect = useCallback((fullText, index) => {
@@ -141,7 +199,7 @@ function App() {
     return () => clearInterval(timer);
   },[]);
 
-  // ====== 处理单张图片 ======
+  // ====== 处理单张图片 (包含备用模型重试逻辑) ======
   const handleFile = useCallback(async (file, index) => {
     if (!file.type.startsWith('image/')) return;
 
@@ -155,20 +213,70 @@ function App() {
       });
 
       const imageData = await fileToBase64(file);
-      const response = await fetch('/api/recognize', {
+      
+      let response;
+      let isFallback = false;
+
+      // --- 第1次请求：使用当前选中的模型 ---
+      // 请在 Vercel 后的端 api/recognize 中解析这些参数：modelId, channel, apiName
+      // 并在检测到 channel === 'silicon' 时，使用 process.env.SILICON_TOKEN 去请求硅基流动
+      response = await fetch('/api/recognize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageData, mimeType: file.type }),
+        body: JSON.stringify({ 
+          imageData, 
+          mimeType: file.type,
+          modelId: selectedModel.id,
+          channel: selectedModel.channel,
+          apiName: selectedModel.apiName
+        }),
       });
 
+      // --- 异常处理与降级回退 ---
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: '请求失败' }));
-        throw new Error(errorData.error || '服务异常');
+        // 当使用的是百度的 PaddleOCR-VL-1.5 时，触发自动备用逻辑
+        if (selectedModel.id === 'baidu-vl-1.5') {
+          isFallback = true;
+          const warningMsg = "> ⚠️ **系统提示：百度模型调用失败，正在自动切换至硅基流动模型重试...**\n\n";
+          setStreamingText(warningMsg);
+          setResults(prev => {
+            const updated = [...prev];
+            updated[index] = warningMsg;
+            return updated;
+          });
+
+          // 自动切换为硅基流动的 PaddleOCR-VL-1.5
+          const fallbackModel = MODELS.find(m => m.id === 'sili-vl-1.5');
+          response = await fetch('/api/recognize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              imageData, 
+              mimeType: file.type,
+              modelId: fallbackModel.id,
+              channel: fallbackModel.channel,
+              apiName: fallbackModel.apiName
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: '硅基流动备用请求失败' }));
+            throw new Error(errorData.error || '硅基流动模型备用重试也失败了');
+          }
+        } else {
+          // 其他模型失败直接抛出异常
+          const errorData = await response.json().catch(() => ({ error: '请求失败' }));
+          throw new Error(errorData.error || '服务异常');
+        }
       }
 
       const data = await response.json();
       const finalText = preprocessText(data.text || '');
-      typewriterEffect(finalText, index);
+      
+      // 如果触发了备用模型，文本前沿保留提示
+      const finalPrefix = isFallback ? "> ⚠️ **系统提示：百度模型调用失败，已自动切换至硅基流动模型完成识别**\n\n" : "";
+      
+      typewriterEffect(finalPrefix + finalText, index);
     } catch (error) {
       console.error('识别失败:', error);
       const errMsg = `> ⚠️ **系统提示：图片处理失败**\n>\n> ${error.message}`;
@@ -180,7 +288,7 @@ function App() {
       setStreamingText(errMsg);
       setIsStreaming(false);
     }
-  }, [typewriterEffect]);
+  }, [typewriterEffect, selectedModel]);
 
   // ====== 并发控制 ======
   const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
@@ -207,7 +315,7 @@ function App() {
             setIsLoading(true);
             const url = URL.createObjectURL(file);
             const newIdx = images.length;
-            setImages(prev => [...prev, url]);
+            setImages(prev =>[...prev, url]);
             setResults(prev => [...prev, '']);
             setCurrentIndex(newIdx);
             await handleFile(file, newIdx);
@@ -415,7 +523,7 @@ function App() {
       window.removeEventListener('touchmove', move);
       window.removeEventListener('touchend', end);
     };
-  }, [isDraggingModal, modalOffset]);
+  },[isDraggingModal, modalOffset]);
 
   // ====== 渲染 ======
   return (
@@ -469,6 +577,36 @@ function App() {
                 {showUrlInput ? '取消链接输入' : '使用链接上传'}
               </button>
             </div>
+
+            {/* ====== 模型选择器 ====== */}
+            <div className="model-selector-container">
+              <div className="model-selector" ref={dropdownRef}>
+                <div className="model-selector-header" onClick={(e) => { e.stopPropagation(); setShowDropdown(!showDropdown); }}>
+                  <span className="model-label">选择模型</span>
+                  <span className="model-current-name">{selectedModel.name}</span>
+                  {selectedModel.badge && <img src={selectedModel.badge} alt="badge" className="model-badge" />}
+                  <span className="model-arrow" style={{ transform: showDropdown ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+                </div>
+                {showDropdown && (
+                  <div className="model-dropdown-list">
+                    {MODELS.map(model => (
+                      <div
+                        key={model.id}
+                        className={`model-dropdown-item ${selectedModel.id === model.id ? 'active' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); setSelectedModel(model); setShowDropdown(false); }}
+                      >
+                        <div className="model-item-top">
+                          <span className="model-item-name">{model.name}</span>
+                          {model.badge && <img src={model.badge} alt="badge" className="model-item-badge" />}
+                        </div>
+                        <div className="model-item-desc">{model.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {showUrlInput && (
               <form onSubmit={handleUrlSubmit} className="url-form">
                 <input type="url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="粘贴图片链接 (URL)" className="url-input" required />
@@ -567,3 +705,4 @@ function App() {
 }
 
 export default App;
+--- END OF FILE App.js ---
