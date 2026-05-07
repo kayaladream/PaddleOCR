@@ -1,5 +1,3 @@
---- START OF FILE recognize.js ---
-
 // api/recognize.js
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -124,4 +122,3 @@ export default async function handler(req, res) {
     res.status(500).json({ error: `${error.message}` });
   }
 }
---- END OF FILE recognize.js ---
