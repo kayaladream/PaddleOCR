@@ -1,4 +1,3 @@
---- START OF FILE App.js ---
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import 'katex/dist/katex.min.css';
 import ReactMarkdown from 'react-markdown';
@@ -705,4 +704,3 @@ function App() {
 }
 
 export default App;
---- END OF FILE App.js ---
