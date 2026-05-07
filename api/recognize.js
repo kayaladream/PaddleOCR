@@ -69,7 +69,7 @@ export default async function handler(req, res) {
       
       // 使用 OpenAI 兼容的视觉模型 Payload 格式
       const payload = {
-        model: apiName, // 例如 "PaddlePaddle/PaddleOCR-VL-1.5" 或 "deepseek-ai/DeepSeek-OCR"
+        model: apiName,
         messages:[
           {
             role: "user",
@@ -84,7 +84,11 @@ export default async function handler(req, res) {
               }
             ]
           }
-        ]
+        ],
+        // ====== 解决“无中生有”幻觉的关键参数 ======
+        temperature: 0.01,  // 极低的温度，拒绝模型自由发挥
+        top_p: 0.1,         // 限制概率分布，强制输出最准确的字词
+        max_tokens: 4096    // 防止长文档因为 token 不足被截断
       };
 
       const response = await fetch(url, {
