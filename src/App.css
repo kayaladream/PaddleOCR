@@ -307,7 +307,14 @@ header p {
 .gradient-text p,
 .gradient-text li,
 .gradient-text td,
-.gradient-text th {
+.gradient-text th,
+.gradient-text h1,
+.gradient-text h2,
+.gradient-text h3,
+.gradient-text h4,
+.gradient-text h5,
+.gradient-text h6,
+.gradient-text blockquote {
   opacity: 0;
   animation: smoothReveal 1s ease-out forwards;
   animation-delay: calc(var(--index) * 50ms);
@@ -860,7 +867,14 @@ main.has-content {
 .editing-area .gradient-text p,
 .editing-area .gradient-text li,
 .editing-area .gradient-text td,
-.editing-area .gradient-text th {
+.editing-area .gradient-text th,
+.editing-area .gradient-text h1,
+.editing-area .gradient-text h2,
+.editing-area .gradient-text h3,
+.editing-area .gradient-text h4,
+.editing-area .gradient-text h5,
+.editing-area .gradient-text h6,
+.editing-area .gradient-text blockquote {
   animation: none !important;
   opacity: 1 !important;
   background: none !important;
@@ -1087,4 +1101,12 @@ main.has-content {
 .model-item-desc {
   font-size: 0.85rem;
   color: #6e7781;
+}
+
+.gradient-text h1, 
+.gradient-text h2, 
+.gradient-text h3 {
+  font-size: 1.15rem;
+  margin: 0.5rem 0;
+  font-weight: bold;
 }
