@@ -14,7 +14,6 @@
   100% { transform: scale(1); }
 }
 
-/* 这就是你最喜欢的：原来那套优雅的打字机一次性流光 + 沉淀到黑色的动画 */
 @keyframes smoothReveal {
   0% {
     opacity: 0;
@@ -51,6 +50,7 @@
 }
 
 body {
+  /* 背景极浅蓝灰 */
   background: linear-gradient(135deg, #F5F8FA 0%, #FFFFFF 100%);
   min-height: 100vh;
   position: relative;
@@ -92,10 +92,12 @@ header {
 header h1 {
   font-size: 2.2rem;
   font-weight: 700;
+  /* 标题颜色 */
   background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: rgba(0, 0, 0, 0);
+  
   margin-bottom: 0.5rem;
   letter-spacing: 1px;
 }
@@ -118,6 +120,7 @@ header p {
 }
 
 .upload-button {
+  /* 按钮背景 */
   background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
   background-size: 150% 100%;
   color: white;
@@ -131,6 +134,10 @@ header p {
   cursor: pointer;
   display: inline-block;
   text-align: center;
+}
+
+.upload-button::after {
+  display: none;
 }
 
 .upload-button:hover {
@@ -253,7 +260,11 @@ header p {
 .result-text ol {
   width: 100%;
   color: #1d1d1f;
+  -webkit-text-fill-color: #1d1d1f;
   margin: 1rem 0;
+  opacity: 0;
+  animation: fadeIn 0.5s ease-out forwards;
+  animation-delay: 0.3s;
 }
 
 .result-text table {
@@ -268,8 +279,12 @@ header p {
   padding: 12px 16px;
   text-align: left;
   color: #1d1d1f;
+  -webkit-text-fill-color: #1d1d1f;
   word-wrap: break-word;
   vertical-align: top;
+  opacity: 0;
+  animation: smoothReveal 1s ease-out forwards;
+  animation-delay: calc(var(--index) * 50ms);
 }
 
 .result-text p {
@@ -278,6 +293,7 @@ header p {
 }
 
 .gradient-text {
+  color: #1d1d1f;
   position: relative;
   min-height: 50px;
   font-size: 1.1rem;
@@ -288,13 +304,21 @@ header p {
   line-height: 1.6;
 }
 
-/* =======================================================================
-   1. 完美恢复原来的优雅打字机：这次使用了星号 * ，使得所有输出
-      不论是段落、表格标签、还是奇怪格式，一律无死角覆盖渐变打字效果。
-   ======================================================================= */
-.gradient-text > div > * {
+/* ================== 修改的内容在这里 ================== */
+.gradient-text p,
+.gradient-text li,
+.gradient-text td,
+.gradient-text th,
+.gradient-text h1,
+.gradient-text h2,
+.gradient-text h3,
+.gradient-text h4,
+.gradient-text h5,
+.gradient-text h6,
+.gradient-text blockquote {
   opacity: 0;
-  animation: smoothReveal 1.2s ease-out forwards;
+  animation: smoothReveal 1s ease-out forwards;
+  animation-delay: calc(var(--index) * 50ms);
   background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
   background-size: 300% 100%;
   -webkit-background-clip: text;
@@ -737,6 +761,9 @@ main.has-content {
   display: inline-block;
   vertical-align: middle;
   margin: 0 0.2em;
+  opacity: 0;
+  animation: smoothReveal 1s ease-out forwards;
+  animation-delay: calc(var(--index) * 50ms);
 }
 .latex-block {
   margin: 1em 0;
@@ -745,6 +772,9 @@ main.has-content {
   display: flex;
   justify-content: center;
   padding: 0.5em 0;
+  opacity: 0;
+  animation: smoothReveal 1s ease-out forwards;
+  animation-delay: calc(var(--index) * 50ms);
 }
 .latex-block .katex-display {
   margin: 0;
@@ -813,35 +843,45 @@ main.has-content {
   .github-link svg { width: 28px; height: 28px; }
 }
 
+.edit-button, .save-button, .cancel-button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  white-space: nowrap;
+}
+.edit-button:hover, .save-button:hover, .cancel-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+}
+.edit-button { background: #ffc107; color: black; }
+.save-button { background: #28a745; color: white; }
+.cancel-button { background: #dc3545; color: white; }
 .editing-area .result-header div {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-
-/* =======================================================================
-   2. 翻页专属：只有“文字内容”发生从左到右滑入并附带颜色变换的入场动画
-      外面的编辑白框、滚动条完全保持静止，视觉体验非常舒服！
-   ======================================================================= */
-.edit-content-editable > * {
-  animation: editContentSweep 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-  opacity: 0; /* 触发前先隐藏 */
-}
-
-@keyframes editContentSweep {
-  0% {
-      opacity: 0;
-      clip-path: inset(0 100% 0 0); /* 起始时被从右往左裁剪至完全不可见 */
-      transform: translateX(-10px);
-      color: #009DFF; /* 伴随着流光蓝色进入 */
-  }
-  100% {
-      opacity: 1;
-      clip-path: inset(0 0 0 0); /* 展开为全部可见 */
-      transform: translateX(0);
-      color: inherit; /* 定格恢复为原始深灰色 */
-  }
+/* ================== 修改的内容在这里 ================== */
+.editing-area .gradient-text p,
+.editing-area .gradient-text li,
+.editing-area .gradient-text td,
+.editing-area .gradient-text th,
+.editing-area .gradient-text h1,
+.editing-area .gradient-text h2,
+.editing-area .gradient-text h3,
+.editing-area .gradient-text h4,
+.editing-area .gradient-text h5,
+.editing-area .gradient-text h6,
+.editing-area .gradient-text blockquote {
+  animation: none !important;
+  opacity: 1 !important;
+  background: none !important;
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
 }
 
 .edit-content-editable {
@@ -871,11 +911,23 @@ main.has-content {
   box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
 }
 
-.edit-content-editable strong { font-weight: bold; }
-.edit-content-editable em { font-style: italic; }
-.edit-content-editable p { margin: 0 0 0em 0; }
-.edit-content-editable ul, .edit-content-editable ol { padding-left: 2em; margin: 0 0 1em 0; }
-.edit-content-editable li { margin-bottom: 0.2em; }
+.edit-content-editable strong {
+  font-weight: bold;
+}
+.edit-content-editable em {
+  font-style: italic;
+}
+.edit-content-editable p {
+  margin: 0 0 0em 0;
+}
+.edit-content-editable ul,
+.edit-content-editable ol {
+  padding-left: 2em;
+  margin: 0 0 1em 0;
+}
+.edit-content-editable li {
+  margin-bottom: 0.2em;
+}
 .edit-content-editable code {
   background-color: rgba(27, 31, 35, 0.05);
   padding: .2em .4em;
@@ -892,7 +944,13 @@ main.has-content {
   border-radius: 3px;
   margin: 0 0 1em 0;
 }
-.edit-content-editable pre code { padding: 0; margin: 0; font-size: 100%; background-color: transparent; border-radius: 0; }
+.edit-content-editable pre code {
+  padding: 0;
+  margin: 0;
+  font-size: 100%;
+  background-color: transparent;
+  border-radius: 0;
+}
 .edit-content-editable blockquote {
   padding: 0 1em;
   color: #6a737d;
@@ -905,8 +963,15 @@ main.has-content {
   width: auto;
   border-spacing: 0;
 }
-.edit-content-editable th, .edit-content-editable td { border: 1px solid #dfe2e5; padding: 6px 13px; }
-.edit-content-editable .katex { color: inherit !important; pointer-events: auto; }
+.edit-content-editable th,
+.edit-content-editable td {
+  border: 1px solid #dfe2e5;
+  padding: 6px 13px;
+}
+.edit-content-editable .katex {
+  color: inherit !important;
+  pointer-events: auto;
+}
 
 .result-placeholder {
   text-align: center;
@@ -1039,7 +1104,7 @@ main.has-content {
   color: #6e7781;
 }
 
-/* 修复打字机状态下生成的 Markdown 标题过于巨大 */
+/* 追加到末尾：修复打字机状态下生成的 Markdown 标题过于巨大导致闪烁突兀 */
 .gradient-text h1, 
 .gradient-text h2, 
 .gradient-text h3 {
