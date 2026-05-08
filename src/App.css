@@ -304,6 +304,7 @@ header p {
   line-height: 1.6;
 }
 
+/* ================== 修改的内容在这里 ================== */
 .gradient-text p,
 .gradient-text li,
 .gradient-text td,
@@ -864,6 +865,7 @@ main.has-content {
   flex-wrap: wrap;
 }
 
+/* ================== 修改的内容在这里 ================== */
 .editing-area .gradient-text p,
 .editing-area .gradient-text li,
 .editing-area .gradient-text td,
@@ -993,11 +995,10 @@ main.has-content {
   margin-top: 0.5rem;
 }
 
-/* ===== 新增包裹层样式 ===== */
 .model-selector-wrapper {
   display: flex;
   align-items: center;
-  position: relative; /* 下拉框以这个 wrapper 为基准，从而覆盖掉左边的文字 */
+  position: relative;
 }
 
 .model-label-outside {
@@ -1103,6 +1104,7 @@ main.has-content {
   color: #6e7781;
 }
 
+/* 追加到末尾：修复打字机状态下生成的 Markdown 标题过于巨大导致闪烁突兀 */
 .gradient-text h1, 
 .gradient-text h2, 
 .gradient-text h3 {
