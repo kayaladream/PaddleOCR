@@ -53,7 +53,7 @@ const MODELS =[
 const preprocessText = (text) => {
   if (!text) return '';
 
-  const tables = [];
+  const tables =[];
   text = text.replace(/\|[^\n]+\|\n\|[-|\s]+\|(?:\n\|[^\n]+\|)+/g, (match) => {
     tables.push(match);
     return `__TABLE_${tables.length - 1}__`;
@@ -227,7 +227,7 @@ function App() {
   const typewriterEffect = useCallback((fullText, index, shouldStream) => {
     if (!shouldStream) {
       setResults(prev => {
-        const updated = [...prev];
+        const updated =[...prev];
         updated[index] = fullText;
         return updated;
       });
@@ -258,7 +258,7 @@ function App() {
     if (!file.type.startsWith('image/')) return;
 
     try {
-      setStreamingStatus(prev => ({ ...prev, [index]: true }));
+      setStreamingStatus(prev => ({ ...prev,[index]: true }));
       setResults(prev => {
         const newResults = [...prev];
         newResults[index] = '';
@@ -369,9 +369,9 @@ function App() {
 
       const startIdx = images.length;
       const urls = expandedFiles.map(f => URL.createObjectURL(f));
-      setImages(prev => [...prev, ...urls]);
-      setResults(prev => [...prev, ...new Array(expandedFiles.length).fill('')]);
-      setResultModels(prev => [...prev, ...new Array(expandedFiles.length).fill(null)]);
+      setImages(prev =>[...prev, ...urls]);
+      setResults(prev =>[...prev, ...new Array(expandedFiles.length).fill('')]);
+      setResultModels(prev =>[...prev, ...new Array(expandedFiles.length).fill(null)]);
       setCurrentIndex(startIdx);
       setIsLoading(false);
 
@@ -688,9 +688,8 @@ function App() {
             <div className="result-container">
               {isLoading && !currentIsStreaming && results[currentIndex] == null && <div className="loading result-loading">等待识别...</div>}
 
-              {/* is-streaming 类名包裹正在打字的内容，应用无限流光效果 */}
               {currentIsStreaming && (
-                <div className="result-text is-streaming">
+                <div className="result-text">
                   <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...) {modelInfoText}</span></div>
                   <div className="gradient-text">
                     <ReactMarkdown
@@ -708,9 +707,9 @@ function App() {
                 </div>
               )}
 
-              {/* 关键修改处：给编辑区容器加 key，让它在切换页面和打字结束时重新挂载，从而触发向右扫光的入场动画 */}
+              {/* 已经去除了这里的 key 重绘，保证编辑框体静止，只有内容通过 CSS 动画生效 */}
               {!currentIsStreaming && results[currentIndex] != null && (
-                <div key={`edit-area-${currentIndex}`} className="result-text editing-area">
+                <div className="result-text editing-area">
                   <div className="result-header">
                     <span>编辑第 {currentIndex + 1} 张图片的结果 {modelInfoText}</span>
                     <button className="copy-button" onClick={handleCopyText}>复制内容</button>
