@@ -9,7 +9,7 @@ import DOMPurify from 'dompurify';
 import './App.css';
 
 // ====== 模型列表定义 ======
-const MODELS = [
+const MODELS =[
   {
     id: 'baidu-vl-1.5',
     name: 'PaddleOCR-VL-1.5',
@@ -133,7 +133,7 @@ turndownService.addRule('katex', {
   },
 });
 
-// ====== 并发处理工具（移到组件外部，避免 Hook 依赖警告） ======
+// ====== 并发处理工具 ======
 const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
   const queue = [...items.entries()];
   const workers = new Array(maxConcurrent).fill().map(async () => {
@@ -145,7 +145,7 @@ const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
   await Promise.all(workers);
 };
 
-// ====== 动态加载 PDF.js（纯 CDN，无需 npm 依赖） ======
+// ====== 动态加载 PDF.js ======
 let pdfjsLibPromise = null;
 const loadPdfJs = () => {
   if (!pdfjsLibPromise) {
@@ -170,10 +170,9 @@ const loadPdfJs = () => {
 // ====== PDF 转图片工具 ======
 const pdfToImages = async (file) => {
   const pdfjsLib = await loadPdfJs();
-
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const images = [];
+  const images =[];
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const viewport = page.getViewport({ scale: 2 });
@@ -194,23 +193,25 @@ function App() {
   const [resultModels, setResultModels] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const[isDragging, setIsDragging] = useState(false);
   const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
   const dropZoneRef = useRef(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [streamingText, setStreamingText] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
+  const[showModal, setShowModal] = useState(false);
+  
+  // 使用对象状态来单独管理每张图片的 Streaming 状态
+  const [streamingStatus, setStreamingStatus] = useState({});
+  
   const [isDraggingModal, setIsDraggingModal] = useState(false);
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
   const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
   const [modalScale, setModalScale] = useState(1);
-  const [editText, setEditText] = useState('');
+  const[editText, setEditText] = useState('');
   const editDivRef = useRef(null);
   
   const [selectedModel, setSelectedModel] = useState(MODELS[0]);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const[showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
@@ -221,35 +222,44 @@ function App() {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  },[]);
 
-  const typewriterEffect = useCallback((fullText, index) => {
+  const typewriterEffect = useCallback((fullText, index, shouldStream) => {
+    // 批量模式（例如处理PDF）下直接关闭打字机动画，提升性能，拒绝闪屏
+    if (!shouldStream) {
+      setResults(prev => {
+        const updated = [...prev];
+        updated[index] = fullText;
+        return updated;
+      });
+      setStreamingStatus(prev => ({ ...prev, [index]: false }));
+      return;
+    }
+
     let pos = 0;
     const speed = 15;
     const timer = setInterval(() => {
       if (pos < fullText.length) {
-        const current = fullText.substring(0, pos + 1);
-        setStreamingText(current);
+        pos += 2; // 稍稍加速
+        const current = fullText.substring(0, pos);
         setResults(prev => {
           const updated = [...prev];
           updated[index] = current;
           return updated;
         });
-        pos++;
       } else {
         clearInterval(timer);
-        setIsStreaming(false);
+        setStreamingStatus(prev => ({ ...prev, [index]: false }));
       }
     }, speed);
     return () => clearInterval(timer);
-  }, []);
+  },[]);
 
-  const handleFile = useCallback(async (file, index) => {
+  const handleFile = useCallback(async (file, index, isBatch = false) => {
     if (!file.type.startsWith('image/')) return;
 
     try {
-      setIsStreaming(true);
-      setStreamingText('');
+      setStreamingStatus(prev => ({ ...prev, [index]: true }));
       setResults(prev => {
         const newResults = [...prev];
         newResults[index] = '';
@@ -257,7 +267,6 @@ function App() {
       });
 
       const imageData = await fileToBase64(file);
-      
       let response;
       let isFallback = false;
 
@@ -276,13 +285,15 @@ function App() {
       if (!response.ok) {
         if (selectedModel.id === 'baidu-vl-1.5') {
           isFallback = true;
-          const warningMsg = "> ⚠️ **系统提示：百度模型调用失败，正在自动切换至硅基流动模型重试...**\n\n";
-          setStreamingText(warningMsg);
-          setResults(prev => {
-            const updated = [...prev];
-            updated[index] = warningMsg;
-            return updated;
-          });
+          // 当触发 fallback 时，仅在非批量状态下用打字机提前渲染提示语
+          if (!isBatch) {
+            const warningMsg = "> ⚠️ **系统提示：百度模型调用失败，正在自动切换至硅基流动模型重试...**\n\n";
+            setResults(prev => {
+              const updated = [...prev];
+              updated[index] = warningMsg;
+              return updated;
+            });
+          }
 
           const fallbackModel = MODELS.find(m => m.id === 'sili-vl-1.5');
           response = await fetch('/api/recognize', {
@@ -311,14 +322,14 @@ function App() {
       const finalText = preprocessText(data.text || '');
       const finalPrefix = isFallback ? "> ⚠️ **系统提示：百度模型调用失败，已自动切换至硅基流动模型完成识别**\n\n" : "";
       
-      // 保存模型信息
       setResultModels(prev => {
         const updated = [...prev];
         updated[index] = { channel: selectedModel.channel, name: selectedModel.name };
         return updated;
       });
 
-      typewriterEffect(finalPrefix + finalText, index);
+      // 是否开启打字机：仅在单图模式下开启
+      typewriterEffect(finalPrefix + finalText, index, !isBatch);
     } catch (error) {
       console.error('识别失败:', error);
       const errMsg = `> ⚠️ **系统提示：图片处理失败**\n>\n> ${error.message}`;
@@ -327,8 +338,7 @@ function App() {
         updated[index] = errMsg;
         return updated;
       });
-      setStreamingText(errMsg);
-      setIsStreaming(false);
+      setStreamingStatus(prev => ({ ...prev, [index]: false }));
     }
   }, [typewriterEffect, selectedModel]);
 
@@ -336,7 +346,7 @@ function App() {
   const processFiles = useCallback(async (files) => {
     setIsLoading(true);
     try {
-      const expandedFiles = [];
+      const expandedFiles =[];
       for (const file of files) {
         if (file.type === 'application/pdf') {
           try {
@@ -362,14 +372,15 @@ function App() {
       setResults(prev => [...prev, ...new Array(expandedFiles.length).fill('')]);
       setResultModels(prev => [...prev, ...new Array(expandedFiles.length).fill(null)]);
       setCurrentIndex(startIdx);
+      setIsLoading(false); // 文件解析完成，允许用户翻页，后台并行上传识别
 
-      await concurrentProcess(expandedFiles, (file, fileIdx) => handleFile(file, startIdx + fileIdx), 2);
+      const isBatch = expandedFiles.length > 1; // 批量模式下不使用打字机
+      await concurrentProcess(expandedFiles, (file, fileIdx) => handleFile(file, startIdx + fileIdx, isBatch), 2);
     } catch (err) {
       alert('处理文件时出错：' + err.message);
-    } finally {
       setIsLoading(false);
     }
-  }, [images.length, handleFile]);  // 不再依赖 concurrentProcess
+  },[images.length, handleFile]);
 
   // 粘贴事件
   useEffect(() => {
@@ -377,7 +388,7 @@ function App() {
       if (editDivRef.current?.contains(e.target) || showModal) return;
       e.preventDefault();
       const items = Array.from(e.clipboardData.items);
-      const newFiles = [];
+      const newFiles =[];
       for (const item of items) {
         if (item.type.startsWith('image/') || item.type === 'application/pdf') {
           const file = item.getAsFile();
@@ -397,7 +408,7 @@ function App() {
     };
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  }, [processFiles, showModal]);
+  },[processFiles, showModal]);
 
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
@@ -445,16 +456,16 @@ function App() {
     } catch (err) {
       alert(`无法加载图片: ${err.message}`);
       setShowUrlInput(true);
-    } finally {
       setIsLoading(false);
     }
   };
 
+  // 移除了翻页过程中对 isLoading / isStreaming 的限制，允许后台识别的同时用户随意翻页
   const handlePrevImage = () => {
-    if (currentIndex > 0 && !isLoading && !isStreaming) setCurrentIndex(currentIndex - 1);
+    if (currentIndex > 0 && !isLoading) setCurrentIndex(currentIndex - 1);
   };
   const handleNextImage = () => {
-    if (currentIndex < images.length - 1 && !isLoading && !isStreaming) setCurrentIndex(currentIndex + 1);
+    if (currentIndex < images.length - 1 && !isLoading) setCurrentIndex(currentIndex + 1);
   };
 
   useEffect(() => {
@@ -472,14 +483,14 @@ function App() {
       window.removeEventListener('dragleave', dragLeave);
       window.removeEventListener('drop', drop);
     };
-  }, []);
+  },[]);
 
   const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.types.includes('Files')) setIsDragging(true); };
   const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
   const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!dropZoneRef.current.contains(e.relatedTarget)) setIsDragging(false); };
 
   useEffect(() => {
-    if (isStreaming) return;
+    if (streamingStatus[currentIndex]) return;
     const md = results[currentIndex] || '';
     setEditText(md);
     if (editDivRef.current) {
@@ -488,10 +499,10 @@ function App() {
         editDivRef.current.innerHTML = DOMPurify.sanitize(html);
       }
     }
-  }, [currentIndex, results, isStreaming]);
+  }, [currentIndex, results, streamingStatus]);
 
   const handleCopyText = () => {
-    if (!editText || isStreaming) return;
+    if (!editText || streamingStatus[currentIndex]) return;
     const plain = editText.replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(\*|_)(.*?)\1/g, '$2');
     navigator.clipboard.writeText(plain.trim()).then(() => {
       const btn = document.querySelector('.copy-button');
@@ -533,7 +544,7 @@ function App() {
       window.removeEventListener('touchmove', move);
       window.removeEventListener('touchend', end);
     };
-  }, [isDraggingModal, modalOffset]);
+  },[isDraggingModal, modalOffset]);
 
   const handleModalMouseDown = (e) => {
     if (e.target.classList.contains('modal-close') || e.button !== 0) return;
@@ -552,8 +563,16 @@ function App() {
     ? `（${resultModels[currentIndex].channel === 'baidu' ? '百度' : '硅基流动'} · ${resultModels[currentIndex].name}）`
     : '';
 
+  const currentIsStreaming = streamingStatus[currentIndex] || false;
+  const showResultsSection = images.length > 0 || isLoading || Object.values(streamingStatus).some(v => v);
+
   return (
     <div className="app">
+      {/* 隐藏的预加载图片区域，解决徽章延迟加载的问题 */}
+      <div style={{ display: 'none' }}>
+        {MODELS.map(m => m.badge && <img key={`preload-${m.id}`} src={m.badge} alt="preload" />)}
+      </div>
+
       <header>
         <a
           href="https://github.com/kayaladream/PaddleOCR"
@@ -649,27 +668,29 @@ function App() {
           {images.length > 0 && (
             <div className="images-preview">
               <div className="image-navigation">
-                <button onClick={handlePrevImage} disabled={currentIndex === 0 || isLoading || isStreaming} className="nav-button">←</button>
+                <button onClick={handlePrevImage} disabled={currentIndex === 0 || isLoading} className="nav-button">←</button>
                 <span className="image-counter">{currentIndex + 1} / {images.length}</span>
-                <button onClick={handleNextImage} disabled={currentIndex === images.length - 1 || isLoading || isStreaming} className="nav-button">→</button>
+                <button onClick={handleNextImage} disabled={currentIndex === images.length - 1 || isLoading} className="nav-button">→</button>
               </div>
               <div className={`image-preview ${isLoading && !results[currentIndex] ? 'loading' : ''}`}>
                 <img
                   key={images[currentIndex]} src={images[currentIndex]} alt={`预览 ${currentIndex + 1}`} onClick={() => { if (images[currentIndex]) { setModalPosition({ x: 0, y: 0 }); setModalScale(1); setShowModal(true); } }} style={{ cursor: images[currentIndex] ? 'zoom-in' : 'default' }}
                   onError={(e) => { console.error("加载图片失败:", images[currentIndex]); e.target.alt = '图片加载失败'; e.target.style.display = 'none'; e.target.closest('.image-preview')?.classList.add('load-error'); }}
                 />
-                {isLoading && !results[currentIndex] && <div className="loading-overlay">{isStreaming ? '识别中...' : '处理中...'}</div>}
+                {((isLoading && !results[currentIndex]) || currentIsStreaming) && (
+                  <div className="loading-overlay">{currentIsStreaming ? '识别中...' : '处理中...'}</div>
+                )}
               </div>
             </div>
           )}
         </div>
 
-        {(images.length > 0 || isLoading || isStreaming) && (
+        {showResultsSection && (
           <div className="result-section">
             <div className="result-container">
-              {isLoading && !isStreaming && results[currentIndex] == null && <div className="loading result-loading">等待识别...</div>}
+              {isLoading && !currentIsStreaming && results[currentIndex] == null && <div className="loading result-loading">等待识别...</div>}
 
-              {isStreaming && (
+              {currentIsStreaming && (
                 <div className="result-text">
                   <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...) {modelInfoText}</span></div>
                   <div className="gradient-text">
@@ -682,13 +703,13 @@ function App() {
                         td: ({node, ...props}) => <td className="markdown-td" {...props} />,
                       }}
                     >
-                      {streamingText}
+                      {results[currentIndex] || ''}
                     </ReactMarkdown>
                   </div>
                 </div>
               )}
 
-              {!isStreaming && results[currentIndex] != null && (
+              {!currentIsStreaming && results[currentIndex] != null && (
                 <div className="result-text editing-area">
                   <div className="result-header">
                     <span>编辑第 {currentIndex + 1} 张图片的结果 {modelInfoText}</span>
@@ -699,7 +720,7 @@ function App() {
                 </div>
               )}
 
-              {!isLoading && !isStreaming && results[currentIndex] == null && images.length > 0 && (
+              {!isLoading && !currentIsStreaming && results[currentIndex] == null && images.length > 0 && (
                 <div className="result-placeholder">
                   <span style={{fontWeight:'bold'}}>⚠️ 系统提示</span><br /><br />当前图片状态异常，暂无识别结果或由于网络中断导致失败，请尝试重新点击上传。
                 </div>
