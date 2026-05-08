@@ -189,29 +189,29 @@ const pdfToImages = async (file) => {
 
 function App() {
   const [images, setImages] = useState([]);
-  const [results, setResults] = useState([]);
+  const[results, setResults] = useState([]);
   const [resultModels, setResultModels] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const[currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const[isDragging, setIsDragging] = useState(false);
-  const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const[isDraggingGlobal, setIsDraggingGlobal] = useState(false);
   const dropZoneRef = useRef(null);
-  const [showUrlInput, setShowUrlInput] = useState(false);
+  const[showUrlInput, setShowUrlInput] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
-  const[showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   
   // 使用对象状态来单独管理每张图片的 Streaming 状态
   const [streamingStatus, setStreamingStatus] = useState({});
   
-  const [isDraggingModal, setIsDraggingModal] = useState(false);
+  const[isDraggingModal, setIsDraggingModal] = useState(false);
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
   const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
   const [modalScale, setModalScale] = useState(1);
-  const[editText, setEditText] = useState('');
+  const [editText, setEditText] = useState('');
   const editDivRef = useRef(null);
   
   const [selectedModel, setSelectedModel] = useState(MODELS[0]);
-  const[showDropdown, setShowDropdown] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
@@ -282,7 +282,19 @@ function App() {
         }),
       });
 
+      // ==========================================
+      // 【核心修改处】错误捕获及环境变量提示逻辑
+      // ==========================================
       if (!response.ok) {
+        // 先解析出后端的错误信息
+        const errorData = await response.json().catch(() => ({ error: '请求失败' }));
+
+        // 1. 如果错误信息中明确指出“环境变量未设置”，直接抛出错误，拒绝自动切换
+        if (errorData.error && errorData.error.includes('环境变量未设置')) {
+          throw new Error(errorData.error);
+        }
+
+        // 2. 对于其他错误，如果当前是 baidu-vl-1.5，则尝试切换到备用模型
         if (selectedModel.id === 'baidu-vl-1.5') {
           isFallback = true;
           // 当触发 fallback 时，仅在非批量状态下用打字机提前渲染提示语
@@ -309,11 +321,11 @@ function App() {
           });
 
           if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: '硅基流动备用请求失败' }));
-            throw new Error(errorData.error || '硅基流动模型备用重试也失败了');
+            const fallbackErrorData = await response.json().catch(() => ({ error: '硅基流动备用请求失败' }));
+            throw new Error(fallbackErrorData.error || '硅基流动模型备用重试也失败了');
           }
         } else {
-          const errorData = await response.json().catch(() => ({ error: '请求失败' }));
+          // 如果不是 baidu-vl-1.5 且遇到了其他报错，直接抛出
           throw new Error(errorData.error || '服务异常');
         }
       }
@@ -338,7 +350,7 @@ function App() {
         updated[index] = errMsg;
         return updated;
       });
-      setStreamingStatus(prev => ({ ...prev, [index]: false }));
+      setStreamingStatus(prev => ({ ...prev,[index]: false }));
     }
   }, [typewriterEffect, selectedModel]);
 
@@ -380,7 +392,7 @@ function App() {
       alert('处理文件时出错：' + err.message);
       setIsLoading(false);
     }
-  },[images.length, handleFile]);
+  }, [images.length, handleFile]);
 
   // 粘贴事件
   useEffect(() => {
@@ -408,7 +420,7 @@ function App() {
     };
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  },[processFiles, showModal]);
+  }, [processFiles, showModal]);
 
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
@@ -499,7 +511,7 @@ function App() {
         editDivRef.current.innerHTML = DOMPurify.sanitize(html);
       }
     }
-  }, [currentIndex, results, streamingStatus]);
+  },[currentIndex, results, streamingStatus]);
 
   const handleCopyText = () => {
     if (!editText || streamingStatus[currentIndex]) return;
@@ -514,7 +526,7 @@ function App() {
     const html = e.currentTarget.innerHTML;
     const newMd = turndownService.turndown(html);
     setEditText(newMd);
-    setResults(prev => { const u = [...prev]; u[currentIndex] = newMd; return u; });
+    setResults(prev => { const u =[...prev]; u[currentIndex] = newMd; return u; });
   };
 
   const handleManualCopy = (e) => {
@@ -544,7 +556,7 @@ function App() {
       window.removeEventListener('touchmove', move);
       window.removeEventListener('touchend', end);
     };
-  },[isDraggingModal, modalOffset]);
+  }, [isDraggingModal, modalOffset]);
 
   const handleModalMouseDown = (e) => {
     if (e.target.classList.contains('modal-close') || e.button !== 0) return;
