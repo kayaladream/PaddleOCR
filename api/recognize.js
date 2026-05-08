@@ -57,36 +57,33 @@ export default async function handler(req, res) {
     } 
 
     // ============================================
-    // 渠道二：硅基流动 (SiliconFlow)  — 仅方案二测试
+    // 渠道二：硅基流动 (SiliconFlow)
     // ============================================
     else if (channel === 'silicon') {
       const url = 'https://api.siliconflow.cn/v1/chat/completions';
       
+      // ====== 模型专属配置 ======
       const MODEL_CONFIGS = {
         'deepseek-ai/DeepSeek-OCR': {
-          userText: '<image>\n<|grounding|>Convert the document to markdown.',
+          userText: '<image>\nConvert the document to markdown.',
           temperature: 0.0,
           top_p: 1.0
-          // DeepSeek 不需要额外坐标控制
         },
         'PaddlePaddle/PaddleOCR-VL-1.5': {
           userText: ' ',
           temperature: 0.0,
-          top_p: 1.0,
-          // ★ 方案二：尝试通过额外参数关闭坐标输出
-          extra_params: {
-            ignore_rc: true,         // 推测参数：忽略区域坐标
-            return_ocr_info: false   // 推测参数：不返回OCR细节
-          }
+          top_p: 1.0
         }
       };
 
+      // 获取配置，未知模型使用安全兜底（空指令）
       const config = MODEL_CONFIGS[apiName] || {
         userText: '',
         temperature: 0.0,
         top_p: 1.0
       };
 
+      // 动态构建 content
       const content = [
         { 
           type: "image_url", 
@@ -101,7 +98,6 @@ export default async function handler(req, res) {
         });
       }
 
-      // 构建请求体，将可能的额外参数展开
       const payload = {
         model: apiName,
         messages: [
@@ -112,8 +108,7 @@ export default async function handler(req, res) {
         ],
         temperature: config.temperature,
         top_p: config.top_p,
-        max_tokens: 4096,
-        ...(config.extra_params || {})  // 仅当配置中存在 extra_params 时才加入
+        max_tokens: 4096
       };
 
       const response = await fetch(url, {
@@ -131,17 +126,36 @@ export default async function handler(req, res) {
       }
 
       const data = await response.json();
-      recognizedText = data?.choices?.[0]?.message?.content || '';
+      let rawText = data?.choices?.[0]?.message?.content || '';
 
-      // ★ 测试阶段：完全不进行后处理清洗，直接返回原始结果
-      // 如果坐标标记仍然存在，说明方案二的参数无效，需要启用方案一（正则清洗）
+      // ====== 移除可能残留的坐标/定位标记 ======
+      if (rawText) {
+        // 1. 移除整行的 ref/det 标记行
+        rawText = rawText.replace(/^.*<\|ref\|>.*<\/\|ref\|>.*$/gm, '');
+        rawText = rawText.replace(/^.*<\|det\|>.*<\/\|det\|>.*$/gm, '');
+        
+        // 2. 移除所有 <LOC_数字> 标记
+        rawText = rawText.replace(/<LOC_\d+>/g, '');
+        
+        // 3. 移除零散的 ref/det 标签
+        rawText = rawText.replace(/<\|ref\|>/g, '').replace(/<\/\|ref\|>/g, '');
+        rawText = rawText.replace(/<\|det\|>/g, '').replace(/<\/\|det\|>/g, '');
+        
+        // 4. 压缩连续空行（最多保留一个空行）
+        rawText = rawText.replace(/\n{3,}/g, '\n\n');
+        
+        // 5. 去除首尾空白
+        recognizedText = rawText.trim();
+      } else {
+        recognizedText = '';
+      }
     } 
     else {
       return res.status(400).json({ error: '不支持的模型渠道' });
     }
 
     // ============================================
-    // 最终返回
+    // 最终校验并返回
     // ============================================
     if (!recognizedText || !recognizedText.trim()) {
       return res.json({ text: '> ⚠️ **系统提示：当前图片未检测到任何可识别的文本，或遇到异常无法解析。**' });
