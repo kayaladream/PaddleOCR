@@ -53,7 +53,7 @@ const MODELS =[
 const preprocessText = (text) => {
   if (!text) return '';
 
-  const tables =[];
+  const tables = [];
   text = text.replace(/\|[^\n]+\|\n\|[-|\s]+\|(?:\n\|[^\n]+\|)+/g, (match) => {
     tables.push(match);
     return `__TABLE_${tables.length - 1}__`;
@@ -135,7 +135,7 @@ turndownService.addRule('katex', {
 
 // ====== 并发处理工具 ======
 const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
-  const queue =[...items.entries()];
+  const queue = [...items.entries()];
   const workers = new Array(maxConcurrent).fill().map(async () => {
     while (queue.length > 0) {
       const [realIdx, item] = queue.shift();
@@ -189,25 +189,25 @@ const pdfToImages = async (file) => {
 
 function App() {
   const [images, setImages] = useState([]);
-  const[results, setResults] = useState([]);
+  const [results, setResults] = useState([]);
   const [resultModels, setResultModels] = useState([]);
-  const[currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const[isDragging, setIsDragging] = useState(false);
-  const[isDraggingGlobal, setIsDraggingGlobal] = useState(false);
+  const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
   const dropZoneRef = useRef(null);
-  const[showUrlInput, setShowUrlInput] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
   const[showModal, setShowModal] = useState(false);
   
   // 使用对象状态来单独管理每张图片的 Streaming 状态
   const [streamingStatus, setStreamingStatus] = useState({});
   
-  const[isDraggingModal, setIsDraggingModal] = useState(false);
+  const [isDraggingModal, setIsDraggingModal] = useState(false);
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
   const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
   const [modalScale, setModalScale] = useState(1);
-  const [editText, setEditText] = useState('');
+  const[editText, setEditText] = useState('');
   const editDivRef = useRef(null);
   
   const [selectedModel, setSelectedModel] = useState(MODELS[0]);
@@ -225,9 +225,10 @@ function App() {
   },[]);
 
   const typewriterEffect = useCallback((fullText, index, shouldStream) => {
+    // 批量模式（例如处理PDF）下直接关闭打字机动画，提升性能，拒绝闪屏
     if (!shouldStream) {
       setResults(prev => {
-        const updated =[...prev];
+        const updated = [...prev];
         updated[index] = fullText;
         return updated;
       });
@@ -239,7 +240,7 @@ function App() {
     const speed = 15;
     const timer = setInterval(() => {
       if (pos < fullText.length) {
-        pos += 2; 
+        pos += 2; // 稍稍加速
         const current = fullText.substring(0, pos);
         setResults(prev => {
           const updated = [...prev];
@@ -258,7 +259,7 @@ function App() {
     if (!file.type.startsWith('image/')) return;
 
     try {
-      setStreamingStatus(prev => ({ ...prev,[index]: true }));
+      setStreamingStatus(prev => ({ ...prev, [index]: true }));
       setResults(prev => {
         const newResults = [...prev];
         newResults[index] = '';
@@ -282,14 +283,9 @@ function App() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: '请求失败' }));
-
-        if (errorData.error && errorData.error.includes('环境变量未设置')) {
-          throw new Error(errorData.error);
-        }
-
         if (selectedModel.id === 'baidu-vl-1.5') {
           isFallback = true;
+          // 当触发 fallback 时，仅在非批量状态下用打字机提前渲染提示语
           if (!isBatch) {
             const warningMsg = "> ⚠️ **系统提示：百度模型调用失败，正在自动切换至硅基流动模型重试...**\n\n";
             setResults(prev => {
@@ -313,10 +309,11 @@ function App() {
           });
 
           if (!response.ok) {
-            const fallbackErrorData = await response.json().catch(() => ({ error: '硅基流动备用请求失败' }));
-            throw new Error(fallbackErrorData.error || '硅基流动模型备用重试也失败了');
+            const errorData = await response.json().catch(() => ({ error: '硅基流动备用请求失败' }));
+            throw new Error(errorData.error || '硅基流动模型备用重试也失败了');
           }
         } else {
+          const errorData = await response.json().catch(() => ({ error: '请求失败' }));
           throw new Error(errorData.error || '服务异常');
         }
       }
@@ -331,6 +328,7 @@ function App() {
         return updated;
       });
 
+      // 是否开启打字机：仅在单图模式下开启
       typewriterEffect(finalPrefix + finalText, index, !isBatch);
     } catch (error) {
       console.error('识别失败:', error);
@@ -340,10 +338,11 @@ function App() {
         updated[index] = errMsg;
         return updated;
       });
-      setStreamingStatus(prev => ({ ...prev,[index]: false }));
+      setStreamingStatus(prev => ({ ...prev, [index]: false }));
     }
-  },[typewriterEffect, selectedModel]);
+  }, [typewriterEffect, selectedModel]);
 
+  // 统一处理文件列表（支持 PDF）
   const processFiles = useCallback(async (files) => {
     setIsLoading(true);
     try {
@@ -369,13 +368,13 @@ function App() {
 
       const startIdx = images.length;
       const urls = expandedFiles.map(f => URL.createObjectURL(f));
-      setImages(prev =>[...prev, ...urls]);
-      setResults(prev =>[...prev, ...new Array(expandedFiles.length).fill('')]);
-      setResultModels(prev =>[...prev, ...new Array(expandedFiles.length).fill(null)]);
+      setImages(prev => [...prev, ...urls]);
+      setResults(prev => [...prev, ...new Array(expandedFiles.length).fill('')]);
+      setResultModels(prev => [...prev, ...new Array(expandedFiles.length).fill(null)]);
       setCurrentIndex(startIdx);
-      setIsLoading(false);
+      setIsLoading(false); // 文件解析完成，允许用户翻页，后台并行上传识别
 
-      const isBatch = expandedFiles.length > 1; 
+      const isBatch = expandedFiles.length > 1; // 批量模式下不使用打字机
       await concurrentProcess(expandedFiles, (file, fileIdx) => handleFile(file, startIdx + fileIdx, isBatch), 2);
     } catch (err) {
       alert('处理文件时出错：' + err.message);
@@ -383,6 +382,7 @@ function App() {
     }
   },[images.length, handleFile]);
 
+  // 粘贴事件
   useEffect(() => {
     const handlePaste = async (e) => {
       if (editDivRef.current?.contains(e.target) || showModal) return;
@@ -408,7 +408,7 @@ function App() {
     };
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  }, [processFiles, showModal]);
+  },[processFiles, showModal]);
 
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
@@ -460,6 +460,7 @@ function App() {
     }
   };
 
+  // 移除了翻页过程中对 isLoading / isStreaming 的限制，允许后台识别的同时用户随意翻页
   const handlePrevImage = () => {
     if (currentIndex > 0 && !isLoading) setCurrentIndex(currentIndex - 1);
   };
@@ -498,7 +499,7 @@ function App() {
         editDivRef.current.innerHTML = DOMPurify.sanitize(html);
       }
     }
-  },[currentIndex, results, streamingStatus]);
+  }, [currentIndex, results, streamingStatus]);
 
   const handleCopyText = () => {
     if (!editText || streamingStatus[currentIndex]) return;
@@ -513,7 +514,7 @@ function App() {
     const html = e.currentTarget.innerHTML;
     const newMd = turndownService.turndown(html);
     setEditText(newMd);
-    setResults(prev => { const u =[...prev]; u[currentIndex] = newMd; return u; });
+    setResults(prev => { const u = [...prev]; u[currentIndex] = newMd; return u; });
   };
 
   const handleManualCopy = (e) => {
@@ -567,6 +568,7 @@ function App() {
 
   return (
     <div className="app">
+      {/* 隐藏的预加载图片区域，解决徽章延迟加载的问题 */}
       <div style={{ display: 'none' }}>
         {MODELS.map(m => m.badge && <img key={`preload-${m.id}`} src={m.badge} alt="preload" />)}
       </div>
@@ -707,7 +709,6 @@ function App() {
                 </div>
               )}
 
-              {/* 已经去除了这里的 key 重绘，保证编辑框体静止，只有内容通过 CSS 动画生效 */}
               {!currentIsStreaming && results[currentIndex] != null && (
                 <div className="result-text editing-area">
                   <div className="result-header">
