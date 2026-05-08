@@ -62,7 +62,6 @@ export default async function handler(req, res) {
     else if (channel === 'silicon') {
       const url = 'https://api.siliconflow.cn/v1/chat/completions';
       
-      // ====== 模型专属配置 ======
       const MODEL_CONFIGS = {
         'deepseek-ai/DeepSeek-OCR': {
           userText: '<image>\nConvert the document to markdown.',
@@ -76,14 +75,12 @@ export default async function handler(req, res) {
         }
       };
 
-      // 获取配置，未知模型使用安全兜底（空指令）
       const config = MODEL_CONFIGS[apiName] || {
         userText: '',
         temperature: 0.0,
         top_p: 1.0
       };
 
-      // 动态构建 content
       const content = [
         { 
           type: "image_url", 
@@ -128,23 +125,23 @@ export default async function handler(req, res) {
       const data = await response.json();
       let rawText = data?.choices?.[0]?.message?.content || '';
 
-      // ====== 移除可能残留的坐标/定位标记 ======
+      // ====== 强化清洗：兼容所有 LOC 和 ref/det 标记 ======
       if (rawText) {
-        // 1. 移除整行的 ref/det 标记行
+        // 1. 移除整行的 <|ref|>...</|ref|> 和 <|det|>...</|det|>
         rawText = rawText.replace(/^.*<\|ref\|>.*<\/\|ref\|>.*$/gm, '');
         rawText = rawText.replace(/^.*<\|det\|>.*<\/\|det\|>.*$/gm, '');
         
-        // 2. 移除所有 <LOC_数字> 标记
-        rawText = rawText.replace(/<LOC_\d+>/g, '');
+        // 2. 移除所有坐标标记（宽松匹配：尖括号内只要包含“LOC”统统删除）
+        //    可匹配：<LOC_221>  <|LOC221|>  <|LOC_221|>  <LOC221> 等
+        rawText = rawText.replace(/<\|?LOC[^>]*\|?>/g, '');
         
         // 3. 移除零散的 ref/det 标签
         rawText = rawText.replace(/<\|ref\|>/g, '').replace(/<\/\|ref\|>/g, '');
         rawText = rawText.replace(/<\|det\|>/g, '').replace(/<\/\|det\|>/g, '');
         
-        // 4. 压缩连续空行（最多保留一个空行）
+        // 4. 压缩连续的空行（最多保留1个空行）
         rawText = rawText.replace(/\n{3,}/g, '\n\n');
         
-        // 5. 去除首尾空白
         recognizedText = rawText.trim();
       } else {
         recognizedText = '';
