@@ -6,10 +6,14 @@ import rehypeKatex from 'rehype-katex';
 import { marked } from 'marked';
 import TurndownService from 'turndown';
 import DOMPurify from 'dompurify';
+import * as pdfjsLib from 'pdfjs-dist';
 import './App.css';
 
+// 设置 PDF.js worker（使用官方 CDN，避免本地部署问题）
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
 // ====== 模型列表定义 ======
-const MODELS =[
+const MODELS = [
   {
     id: 'baidu-vl-1.5',
     name: 'PaddleOCR-VL-1.5',
@@ -34,7 +38,7 @@ const MODELS =[
   {
     id: 'sili-vl-1.5',
     name: 'PaddleOCR-VL-1.5',
-    badge: 'silicon.png',
+    badge: 'sili.png',
     desc: '硅基流动加速的业界SOTA文档大模型',
     channel: 'silicon',
     apiName: 'PaddlePaddle/PaddleOCR-VL-1.5'
@@ -42,7 +46,7 @@ const MODELS =[
   {
     id: 'sili-deepseek',
     name: 'DeepSeek-OCR',
-    badge: 'silicon.png',
+    badge: 'sili.png',
     desc: '深度求索推出的顶尖视觉文字识别模型',
     channel: 'silicon',
     apiName: 'deepseek-ai/DeepSeek-OCR'
@@ -53,7 +57,7 @@ const MODELS =[
 const preprocessText = (text) => {
   if (!text) return '';
 
-  const tables =[];
+  const tables = [];
   text = text.replace(/\|[^\n]+\|\n\|[-|\s]+\|(?:\n\|[^\n]+\|)+/g, (match) => {
     tables.push(match);
     return `__TABLE_${tables.length - 1}__`;
@@ -133,27 +137,47 @@ turndownService.addRule('katex', {
   },
 });
 
+// ====== PDF 转图片工具 ======
+const pdfToImages = async (file) => {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const images = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2 }); // 2倍清晰度
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    images.push(new File([blob], `${file.name || 'pdf'}_page_${i}.png`, { type: 'image/png' }));
+  }
+  return images;
+};
+
 function App() {
   const [images, setImages] = useState([]);
   const [results, setResults] = useState([]);
+  const [resultModels, setResultModels] = useState([]); // 记录每张图片的模型信息
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const[isDragging, setIsDragging] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
   const dropZoneRef = useRef(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
-  const[showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const[isDraggingModal, setIsDraggingModal] = useState(false);
+  const [isDraggingModal, setIsDraggingModal] = useState(false);
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
   const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
   const [modalScale, setModalScale] = useState(1);
-  const[editText, setEditText] = useState('');
+  const [editText, setEditText] = useState('');
   const editDivRef = useRef(null);
   
-  const[selectedModel, setSelectedModel] = useState(MODELS[0]);
+  const [selectedModel, setSelectedModel] = useState(MODELS[0]);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -165,7 +189,7 @@ function App() {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  },[]);
+  }, []);
 
   const typewriterEffect = useCallback((fullText, index) => {
     let pos = 0;
@@ -186,7 +210,7 @@ function App() {
       }
     }, speed);
     return () => clearInterval(timer);
-  },[]);
+  }, []);
 
   const handleFile = useCallback(async (file, index) => {
     if (!file.type.startsWith('image/')) return;
@@ -195,7 +219,7 @@ function App() {
       setIsStreaming(true);
       setStreamingText('');
       setResults(prev => {
-        const newResults =[...prev];
+        const newResults = [...prev];
         newResults[index] = '';
         return newResults;
       });
@@ -255,12 +279,19 @@ function App() {
       const finalText = preprocessText(data.text || '');
       const finalPrefix = isFallback ? "> ⚠️ **系统提示：百度模型调用失败，已自动切换至硅基流动模型完成识别**\n\n" : "";
       
+      // 保存模型信息
+      setResultModels(prev => {
+        const updated = [...prev];
+        updated[index] = { channel: selectedModel.channel, name: selectedModel.name };
+        return updated;
+      });
+
       typewriterEffect(finalPrefix + finalText, index);
     } catch (error) {
       console.error('识别失败:', error);
       const errMsg = `> ⚠️ **系统提示：图片处理失败**\n>\n> ${error.message}`;
       setResults(prev => {
-        const updated =[...prev];
+        const updated = [...prev];
         updated[index] = errMsg;
         return updated;
       });
@@ -269,8 +300,9 @@ function App() {
     }
   }, [typewriterEffect, selectedModel]);
 
+  // 并发处理
   const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
-    const queue =[...items.entries()];
+    const queue = [...items.entries()];
     const workers = new Array(maxConcurrent).fill().map(async () => {
       while (queue.length > 0) {
         const [realIdx, item] = queue.shift();
@@ -280,24 +312,51 @@ function App() {
     await Promise.all(workers);
   };
 
+  // 统一处理文件列表（支持 PDF）
+  const processFiles = useCallback(async (files) => {
+    setIsLoading(true);
+    try {
+      const expandedFiles = [];
+      for (const file of files) {
+        if (file.type === 'application/pdf') {
+          const images = await pdfToImages(file);
+          expandedFiles.push(...images);
+        } else if (file.type.startsWith('image/')) {
+          expandedFiles.push(file);
+        }
+      }
+      if (expandedFiles.length === 0) {
+        alert('没有可处理的文件（仅支持图片和 PDF）');
+        setIsLoading(false);
+        return;
+      }
+
+      const startIdx = images.length;
+      const urls = expandedFiles.map(f => URL.createObjectURL(f));
+      setImages(prev => [...prev, ...urls]);
+      setResults(prev => [...prev, ...new Array(expandedFiles.length).fill('')]);
+      setResultModels(prev => [...prev, ...new Array(expandedFiles.length).fill(null)]);
+      setCurrentIndex(startIdx);
+
+      await concurrentProcess(expandedFiles, (file, fileIdx) => handleFile(file, startIdx + fileIdx), 2);
+    } catch (err) {
+      alert('处理文件时出错：' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [images.length, handleFile, concurrentProcess]);
+
+  // 粘贴事件
   useEffect(() => {
     const handlePaste = async (e) => {
       if (editDivRef.current?.contains(e.target) || showModal) return;
       e.preventDefault();
       const items = Array.from(e.clipboardData.items);
+      const newFiles = [];
       for (const item of items) {
-        if (item.type.startsWith('image/')) {
+        if (item.type.startsWith('image/') || item.type === 'application/pdf') {
           const file = item.getAsFile();
-          if (file) {
-            setIsLoading(true);
-            const url = URL.createObjectURL(file);
-            const newIdx = images.length;
-            setImages(prev =>[...prev, url]);
-            setResults(prev => [...prev, '']);
-            setCurrentIndex(newIdx);
-            await handleFile(file, newIdx);
-            setIsLoading(false);
-          }
+          if (file) newFiles.push(file);
         } else if (item.type === 'text/plain') {
           item.getAsString((text) => {
             if (text.match(/https?:\/\//i)) {
@@ -307,63 +366,29 @@ function App() {
           });
         }
       }
+      if (newFiles.length > 0) {
+        processFiles(newFiles);
+      }
     };
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  },[images.length, handleFile, showModal]);
+  }, [processFiles, showModal]);
 
+  // 文件上传按钮
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-    setIsLoading(true);
-    try {
-      const startIdx = images.length;
-      const urls = files.map(f => URL.createObjectURL(f));
-      setImages(prev => [...prev, ...urls]);
-      setResults(prev =>[...prev, ...new Array(files.length).fill('')]);
-      setCurrentIndex(startIdx);
-      await concurrentProcess(files, (file, fileIdx) => handleFile(file, startIdx + fileIdx), 2);
-    } catch (err) {
-      alert('处理上传文件出错');
-    } finally {
-      setIsLoading(false);
-      if (e.target) e.target.value = null;
-    }
+    await processFiles(files);
+    if (e.target) e.target.value = null;
   };
 
-  const handlePrevImage = () => {
-    if (currentIndex > 0 && !isLoading && !isStreaming) setCurrentIndex(currentIndex - 1);
-  };
-  const handleNextImage = () => {
-    if (currentIndex < images.length - 1 && !isLoading && !isStreaming) setCurrentIndex(currentIndex + 1);
-  };
-
-  useEffect(() => {
-    const dragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer?.types.includes('Files')) setIsDraggingGlobal(true); };
-    const dragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
-    const dragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!e.relatedTarget || e.relatedTarget === document.documentElement) { setIsDraggingGlobal(false); setIsDragging(false); } };
-    const drop = (e) => { e.preventDefault(); e.stopPropagation(); if (dropZoneRef.current && !dropZoneRef.current.contains(e.target)) { setIsDraggingGlobal(false); setIsDragging(false); } };
-    window.addEventListener('dragenter', dragEnter);
-    window.addEventListener('dragover', dragOver);
-    window.addEventListener('dragleave', dragLeave);
-    window.addEventListener('drop', drop);
-    return () => {
-      window.removeEventListener('dragenter', dragEnter);
-      window.removeEventListener('dragover', dragOver);
-      window.removeEventListener('dragleave', dragLeave);
-      window.removeEventListener('drop', drop);
-    };
-  },[]);
-
-  const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.types.includes('Files')) setIsDragging(true); };
-  const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
-  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!dropZoneRef.current.contains(e.relatedTarget)) setIsDragging(false); };
+  // 拖拽处理
   const handleDrop = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
     setIsDraggingGlobal(false);
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');
     if (!files.length) {
       const items = Array.from(e.dataTransfer.items);
       const urls = await Promise.all(items.filter(i => i.kind === 'string' && (i.type === 'text/uri-list' || i.type === 'text/plain')).map(i => new Promise(res => i.getAsString(res))));
@@ -371,21 +396,10 @@ function App() {
       if (imgUrl) { setImageUrl(imgUrl); setShowUrlInput(true); }
       return;
     }
-    setIsLoading(true);
-    try {
-      const startIdx = images.length;
-      const urls = files.map(f => URL.createObjectURL(f));
-      setImages(prev => [...prev, ...urls]);
-      setResults(prev =>[...prev, ...new Array(files.length).fill('')]);
-      setCurrentIndex(startIdx);
-      await concurrentProcess(files, (file, fileIdx) => handleFile(file, startIdx + fileIdx), 2);
-    } catch (err) {
-      alert('拖放处理失败');
-    } finally {
-      setIsLoading(false);
-    }
+    processFiles(files);
   };
 
+  // URL 提交
   const handleUrlSubmit = async (e) => {
     e.preventDefault();
     if (!imageUrl) return;
@@ -403,14 +417,8 @@ function App() {
         if (!res.ok) throw new Error();
         blob = await res.blob();
       }
-      if (!blob.type.startsWith('image/')) throw new Error('非图片文件');
       const file = new File([blob], 'url_image.jpg', { type: blob.type });
-      const url = URL.createObjectURL(file);
-      const newIndex = images.length;
-      setImages(prev =>[...prev, url]);
-      setResults(prev => [...prev, '']);
-      setCurrentIndex(newIndex);
-      await handleFile(file, newIndex);
+      await processFiles([file]);
       setImageUrl('');
     } catch (err) {
       alert(`无法加载图片: ${err.message}`);
@@ -420,37 +428,35 @@ function App() {
     }
   };
 
-  const handleImageClick = () => {
-    if (!images[currentIndex]) return;
-    setModalPosition({ x: 0, y: 0 });
-    setModalScale(1);
-    setShowModal(true);
+  // 图片导航
+  const handlePrevImage = () => {
+    if (currentIndex > 0 && !isLoading && !isStreaming) setCurrentIndex(currentIndex - 1);
   };
-  const handleCloseModal = () => setShowModal(false);
-
-  const handleCopyText = () => {
-    if (!editText || isStreaming) return;
-    const plain = editText.replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(\*|_)(.*?)\1/g, '$2');
-    navigator.clipboard.writeText(plain.trim()).then(() => {
-      const btn = document.querySelector('.copy-button');
-      if (btn) { btn.textContent = '已复制'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = '复制内容'; btn.classList.remove('copied'); }, 1500); }
-    }).catch(() => alert('复制失败'));
+  const handleNextImage = () => {
+    if (currentIndex < images.length - 1 && !isLoading && !isStreaming) setCurrentIndex(currentIndex + 1);
   };
 
-  const handleInput = (e) => {
-    const html = e.currentTarget.innerHTML;
-    const newMd = turndownService.turndown(html);
-    setEditText(newMd);
-    setResults(prev => { const u = [...prev]; u[currentIndex] = newMd; return u; });
-  };
+  // 全局拖拽事件
+  useEffect(() => {
+    const dragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer?.types.includes('Files')) setIsDraggingGlobal(true); };
+    const dragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
+    const dragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!e.relatedTarget || e.relatedTarget === document.documentElement) { setIsDraggingGlobal(false); setIsDragging(false); } };
+    const drop = (e) => { e.preventDefault(); e.stopPropagation(); if (dropZoneRef.current && !dropZoneRef.current.contains(e.target)) { setIsDraggingGlobal(false); setIsDragging(false); } };
+    window.addEventListener('dragenter', dragEnter);
+    window.addEventListener('dragover', dragOver);
+    window.addEventListener('dragleave', dragLeave);
+    window.addEventListener('drop', drop);
+    return () => {
+      window.removeEventListener('dragenter', dragEnter);
+      window.removeEventListener('dragover', dragOver);
+      window.removeEventListener('dragleave', dragLeave);
+      window.removeEventListener('drop', drop);
+    };
+  }, []);
 
-  const handleManualCopy = (e) => {
-    e.preventDefault();
-    const sel = window.getSelection().toString();
-    const plain = sel.replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(\*|_)(.*?)\1/g, '$2');
-    e.clipboardData.setData('text/plain', plain);
-  };
+  // 其他事件处理略...（保持原有即可）
 
+  // 编辑区内容更新
   useEffect(() => {
     if (isStreaming) return;
     const md = results[currentIndex] || '';
@@ -461,7 +467,7 @@ function App() {
         editDivRef.current.innerHTML = DOMPurify.sanitize(html);
       }
     }
-  },[currentIndex, results, isStreaming]);
+  }, [currentIndex, results, isStreaming]);
 
   const handleModalMouseDown = (e) => {
     if (e.target.classList.contains('modal-close') || e.button !== 0) return;
@@ -495,7 +501,35 @@ function App() {
       window.removeEventListener('touchmove', move);
       window.removeEventListener('touchend', end);
     };
-  },[isDraggingModal, modalOffset]);
+  }, [isDraggingModal, modalOffset]);
+
+  const handleCopyText = () => {
+    if (!editText || isStreaming) return;
+    const plain = editText.replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(\*|_)(.*?)\1/g, '$2');
+    navigator.clipboard.writeText(plain.trim()).then(() => {
+      const btn = document.querySelector('.copy-button');
+      if (btn) { btn.textContent = '已复制'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = '复制内容'; btn.classList.remove('copied'); }, 1500); }
+    }).catch(() => alert('复制失败'));
+  };
+
+  const handleInput = (e) => {
+    const html = e.currentTarget.innerHTML;
+    const newMd = turndownService.turndown(html);
+    setEditText(newMd);
+    setResults(prev => { const u = [...prev]; u[currentIndex] = newMd; return u; });
+  };
+
+  const handleManualCopy = (e) => {
+    e.preventDefault();
+    const sel = window.getSelection().toString();
+    const plain = sel.replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(\*|_)(.*?)\1/g, '$2');
+    e.clipboardData.setData('text/plain', plain);
+  };
+
+  // 模型信息展示文本
+  const modelInfoText = resultModels[currentIndex]
+    ? `（${resultModels[currentIndex].channel === 'baidu' ? '百度' : '硅基流动'} · ${resultModels[currentIndex].name}）`
+    : '';
 
   return (
     <div className="app">
@@ -533,17 +567,17 @@ function App() {
           <div
             ref={dropZoneRef}
             className={`upload-zone ${isDragging ? 'dragging' : ''}`}
-            onDragEnter={handleDragEnter}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
+            onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.types.includes('Files')) setIsDragging(true); }}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); if (!dropZoneRef.current.contains(e.relatedTarget)) setIsDragging(false); }}
             onDrop={handleDrop}
             aria-label="图片上传区域"
           >
             <div className="upload-container">
               <label className="upload-button" htmlFor="file-input">
-                {images.length > 0 ? '添加新的图片' : '上传图片'}
+                {images.length > 0 ? '添加新的图片/PDF' : '上传图片/PDF'}
               </label>
-              <input id="file-input" type="file" accept="image/*" onChange={handleImageUpload} multiple hidden />
+              <input id="file-input" type="file" accept="image/*,application/pdf" onChange={handleImageUpload} multiple hidden />
               <button type="button" className="url-button" onClick={() => setShowUrlInput(!showUrlInput)}>
                 {showUrlInput ? '取消链接输入' : '使用链接上传'}
               </button>
@@ -556,10 +590,9 @@ function App() {
               </form>
             )}
 
-            {!images.length && !isDragging && !showUrlInput && <p className="upload-hint">或将图片拖放到此处 / 粘贴图片</p>}
+            {!images.length && !isDragging && !showUrlInput && <p className="upload-hint">或将图片/PDF拖放到此处 / 粘贴图片</p>}
             
             <div className="model-selector-container">
-              {/* 新增包裹层 Wrapper，用作下拉框的对齐锚点 */}
               <div className="model-selector-wrapper" ref={dropdownRef}>
                 <span className="model-label-outside">选择模型</span>
                 <div className="model-selector" onClick={(e) => { e.stopPropagation(); setShowDropdown(!showDropdown); }}>
@@ -569,7 +602,6 @@ function App() {
                     <span className="model-arrow" style={{ transform: showDropdown ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
                   </div>
                 </div>
-                {/* 列表将会相对于整个 Wrapper 定位 */}
                 {showDropdown && (
                   <div className="model-dropdown-list">
                     {MODELS.map(model => (
@@ -590,7 +622,7 @@ function App() {
               </div>
             </div>
 
-            {isDragging && <div className="dragging-overlay-text">松开即可上传图片</div>}
+            {isDragging && <div className="dragging-overlay-text">松开即可上传文件</div>}
           </div>
           {isDraggingGlobal && <div className="drag-overlay active"></div>}
           {images.length > 0 && (
@@ -602,7 +634,7 @@ function App() {
               </div>
               <div className={`image-preview ${isLoading && !results[currentIndex] ? 'loading' : ''}`}>
                 <img
-                  key={images[currentIndex]} src={images[currentIndex]} alt={`预览 ${currentIndex + 1}`} onClick={handleImageClick} style={{ cursor: images[currentIndex] ? 'zoom-in' : 'default' }}
+                  key={images[currentIndex]} src={images[currentIndex]} alt={`预览 ${currentIndex + 1}`} onClick={() => { if (images[currentIndex]) { setModalPosition({ x: 0, y: 0 }); setModalScale(1); setShowModal(true); } }} style={{ cursor: images[currentIndex] ? 'zoom-in' : 'default' }}
                   onError={(e) => { console.error("加载图片失败:", images[currentIndex]); e.target.alt = '图片加载失败'; e.target.style.display = 'none'; e.target.closest('.image-preview')?.classList.add('load-error'); }}
                 />
                 {isLoading && !results[currentIndex] && <div className="loading-overlay">{isStreaming ? '识别中...' : '处理中...'}</div>}
@@ -618,7 +650,7 @@ function App() {
 
               {isStreaming && (
                 <div className="result-text">
-                  <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...)</span></div>
+                  <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...) {modelInfoText}</span></div>
                   <div className="gradient-text">
                     <ReactMarkdown
                       remarkPlugins={[remarkMath]}
@@ -638,7 +670,7 @@ function App() {
               {!isStreaming && results[currentIndex] != null && (
                 <div className="result-text editing-area">
                   <div className="result-header">
-                    <span>编辑第 {currentIndex + 1} 张图片的结果</span>
+                    <span>编辑第 {currentIndex + 1} 张图片的结果 {modelInfoText}</span>
                     <button className="copy-button" onClick={handleCopyText}>复制内容</button>
                   </div>
                   <div ref={editDivRef} contentEditable={true} className="edit-content-editable" onInput={handleInput} onCopy={handleManualCopy}
@@ -672,7 +704,7 @@ function App() {
             }}
           >
             <img src={images[currentIndex]} alt="放大预览" draggable="false" style={{ pointerEvents: 'none', userSelect: 'none' }} />
-            <button className="modal-close" onClick={handleCloseModal} onMouseDown={(e) => e.stopPropagation()}>×</button>
+            <button className="modal-close" onClick={() => setShowModal(false)} onMouseDown={(e) => e.stopPropagation()}>×</button>
           </div>
         </div>
       )}
