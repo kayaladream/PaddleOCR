@@ -6,11 +6,7 @@ import rehypeKatex from 'rehype-katex';
 import { marked } from 'marked';
 import TurndownService from 'turndown';
 import DOMPurify from 'dompurify';
-import * as pdfjsLib from 'pdfjs-dist';
 import './App.css';
-
-// 设置 PDF.js worker（使用官方 CDN，避免本地部署问题）
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 // ====== 模型列表定义 ======
 const MODELS = [
@@ -137,14 +133,39 @@ turndownService.addRule('katex', {
   },
 });
 
+// ====== 动态加载 PDF.js（纯 CDN，无需 npm 依赖） ======
+let pdfjsLibPromise = null;
+const loadPdfJs = () => {
+  if (!pdfjsLibPromise) {
+    pdfjsLibPromise = new Promise((resolve, reject) => {
+      // 如果已加载过（比如其他站点也用了），直接返回
+      if (window.pdfjsLib) {
+        resolve(window.pdfjsLib);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.onload = () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        resolve(window.pdfjsLib);
+      };
+      script.onerror = () => reject(new Error('PDF.js 加载失败'));
+      document.head.appendChild(script);
+    });
+  }
+  return pdfjsLibPromise;
+};
+
 // ====== PDF 转图片工具 ======
 const pdfToImages = async (file) => {
+  const pdfjsLib = await loadPdfJs();
+
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const images = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 2 }); // 2倍清晰度
+    const viewport = page.getViewport({ scale: 2 });
     const canvas = document.createElement('canvas');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
@@ -159,7 +180,7 @@ const pdfToImages = async (file) => {
 function App() {
   const [images, setImages] = useState([]);
   const [results, setResults] = useState([]);
-  const [resultModels, setResultModels] = useState([]); // 记录每张图片的模型信息
+  const [resultModels, setResultModels] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -300,7 +321,6 @@ function App() {
     }
   }, [typewriterEffect, selectedModel]);
 
-  // 并发处理
   const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
     const queue = [...items.entries()];
     const workers = new Array(maxConcurrent).fill().map(async () => {
@@ -319,8 +339,13 @@ function App() {
       const expandedFiles = [];
       for (const file of files) {
         if (file.type === 'application/pdf') {
-          const images = await pdfToImages(file);
-          expandedFiles.push(...images);
+          try {
+            const images = await pdfToImages(file);
+            expandedFiles.push(...images);
+          } catch (err) {
+            console.error('PDF 转换失败:', err);
+            alert('PDF 处理失败：' + err.message);
+          }
         } else if (file.type.startsWith('image/')) {
           expandedFiles.push(file);
         }
@@ -374,7 +399,6 @@ function App() {
     return () => document.removeEventListener('paste', handlePaste);
   }, [processFiles, showModal]);
 
-  // 文件上传按钮
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -382,7 +406,6 @@ function App() {
     if (e.target) e.target.value = null;
   };
 
-  // 拖拽处理
   const handleDrop = async (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -399,7 +422,6 @@ function App() {
     processFiles(files);
   };
 
-  // URL 提交
   const handleUrlSubmit = async (e) => {
     e.preventDefault();
     if (!imageUrl) return;
@@ -428,7 +450,6 @@ function App() {
     }
   };
 
-  // 图片导航
   const handlePrevImage = () => {
     if (currentIndex > 0 && !isLoading && !isStreaming) setCurrentIndex(currentIndex - 1);
   };
@@ -436,7 +457,6 @@ function App() {
     if (currentIndex < images.length - 1 && !isLoading && !isStreaming) setCurrentIndex(currentIndex + 1);
   };
 
-  // 全局拖拽事件
   useEffect(() => {
     const dragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer?.types.includes('Files')) setIsDraggingGlobal(true); };
     const dragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
@@ -454,9 +474,10 @@ function App() {
     };
   }, []);
 
-  // 其他事件处理略...（保持原有即可）
+  const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.types.includes('Files')) setIsDragging(true); };
+  const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
+  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!dropZoneRef.current.contains(e.relatedTarget)) setIsDragging(false); };
 
-  // 编辑区内容更新
   useEffect(() => {
     if (isStreaming) return;
     const md = results[currentIndex] || '';
@@ -468,40 +489,6 @@ function App() {
       }
     }
   }, [currentIndex, results, isStreaming]);
-
-  const handleModalMouseDown = (e) => {
-    if (e.target.classList.contains('modal-close') || e.button !== 0) return;
-    const clientX = e.touches?.[0]?.clientX ?? e.clientX;
-    const clientY = e.touches?.[0]?.clientY ?? e.clientY;
-    setIsDraggingModal(true);
-    setModalOffset({ x: clientX - modalPosition.x, y: clientY - modalPosition.y });
-  };
-  const handleModalWheel = (e) => {
-    e.preventDefault();
-    const delta = -e.deltaY * 0.0005 * modalScale;
-    setModalScale(prev => Math.max(0.1, Math.min(10, prev + delta)));
-  };
-  useEffect(() => {
-    const move = (e) => {
-      if (!isDraggingModal) return;
-      const clientX = e.touches?.[0]?.clientX ?? e.clientX;
-      const clientY = e.touches?.[0]?.clientY ?? e.clientY;
-      setModalPosition({ x: clientX - modalOffset.x, y: clientY - modalOffset.y });
-    };
-    const end = () => setIsDraggingModal(false);
-    if (isDraggingModal) {
-      window.addEventListener('mousemove', move);
-      window.addEventListener('mouseup', end);
-      window.addEventListener('touchmove', move, { passive: false });
-      window.addEventListener('touchend', end);
-    }
-    return () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', end);
-      window.removeEventListener('touchmove', move);
-      window.removeEventListener('touchend', end);
-    };
-  }, [isDraggingModal, modalOffset]);
 
   const handleCopyText = () => {
     if (!editText || isStreaming) return;
@@ -526,7 +513,41 @@ function App() {
     e.clipboardData.setData('text/plain', plain);
   };
 
-  // 模型信息展示文本
+  useEffect(() => {
+    const move = (e) => {
+      if (!isDraggingModal) return;
+      const clientX = e.touches?.[0]?.clientX ?? e.clientX;
+      const clientY = e.touches?.[0]?.clientY ?? e.clientY;
+      setModalPosition({ x: clientX - modalOffset.x, y: clientY - modalOffset.y });
+    };
+    const end = () => setIsDraggingModal(false);
+    if (isDraggingModal) {
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', end);
+      window.addEventListener('touchmove', move, { passive: false });
+      window.addEventListener('touchend', end);
+    }
+    return () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', end);
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('touchend', end);
+    };
+  }, [isDraggingModal, modalOffset]);
+
+  const handleModalMouseDown = (e) => {
+    if (e.target.classList.contains('modal-close') || e.button !== 0) return;
+    const clientX = e.touches?.[0]?.clientX ?? e.clientX;
+    const clientY = e.touches?.[0]?.clientY ?? e.clientY;
+    setIsDraggingModal(true);
+    setModalOffset({ x: clientX - modalPosition.x, y: clientY - modalPosition.y });
+  };
+  const handleModalWheel = (e) => {
+    e.preventDefault();
+    const delta = -e.deltaY * 0.0005 * modalScale;
+    setModalScale(prev => Math.max(0.1, Math.min(10, prev + delta)));
+  };
+
   const modelInfoText = resultModels[currentIndex]
     ? `（${resultModels[currentIndex].channel === 'baidu' ? '百度' : '硅基流动'} · ${resultModels[currentIndex].name}）`
     : '';
@@ -567,11 +588,11 @@ function App() {
           <div
             ref={dropZoneRef}
             className={`upload-zone ${isDragging ? 'dragging' : ''}`}
-            onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.types.includes('Files')) setIsDragging(true); }}
-            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); if (!dropZoneRef.current.contains(e.relatedTarget)) setIsDragging(false); }}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            aria-label="图片上传区域"
+            aria-label="文件上传区域"
           >
             <div className="upload-container">
               <label className="upload-button" htmlFor="file-input">
