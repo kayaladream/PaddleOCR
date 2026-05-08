@@ -34,7 +34,7 @@ const MODELS = [
   {
     id: 'sili-vl-1.5',
     name: 'PaddleOCR-VL-1.5',
-    badge: 'sili.png',
+    badge: 'silicon.png',
     desc: '硅基流动加速的业界SOTA文档大模型',
     channel: 'silicon',
     apiName: 'PaddlePaddle/PaddleOCR-VL-1.5'
@@ -42,7 +42,7 @@ const MODELS = [
   {
     id: 'sili-deepseek',
     name: 'DeepSeek-OCR',
-    badge: 'sili.png',
+    badge: 'silicon.png',
     desc: '深度求索推出的顶尖视觉文字识别模型',
     channel: 'silicon',
     apiName: 'deepseek-ai/DeepSeek-OCR'
@@ -133,12 +133,23 @@ turndownService.addRule('katex', {
   },
 });
 
+// ====== 并发处理工具（移到组件外部，避免 Hook 依赖警告） ======
+const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
+  const queue = [...items.entries()];
+  const workers = new Array(maxConcurrent).fill().map(async () => {
+    while (queue.length > 0) {
+      const [realIdx, item] = queue.shift();
+      await processor(item, realIdx).catch(err => console.error(err));
+    }
+  });
+  await Promise.all(workers);
+};
+
 // ====== 动态加载 PDF.js（纯 CDN，无需 npm 依赖） ======
 let pdfjsLibPromise = null;
 const loadPdfJs = () => {
   if (!pdfjsLibPromise) {
     pdfjsLibPromise = new Promise((resolve, reject) => {
-      // 如果已加载过（比如其他站点也用了），直接返回
       if (window.pdfjsLib) {
         resolve(window.pdfjsLib);
         return;
@@ -321,17 +332,6 @@ function App() {
     }
   }, [typewriterEffect, selectedModel]);
 
-  const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
-    const queue = [...items.entries()];
-    const workers = new Array(maxConcurrent).fill().map(async () => {
-      while (queue.length > 0) {
-        const [realIdx, item] = queue.shift();
-        await processor(item, realIdx).catch(err => console.error(err));
-      }
-    });
-    await Promise.all(workers);
-  };
-
   // 统一处理文件列表（支持 PDF）
   const processFiles = useCallback(async (files) => {
     setIsLoading(true);
@@ -369,7 +369,7 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [images.length, handleFile, concurrentProcess]);
+  }, [images.length, handleFile]);  // 不再依赖 concurrentProcess
 
   // 粘贴事件
   useEffect(() => {
