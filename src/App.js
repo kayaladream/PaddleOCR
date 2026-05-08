@@ -34,7 +34,7 @@ const MODELS =[
   {
     id: 'sili-vl-1.5',
     name: 'PaddleOCR-VL-1.5',
-    badge: 'sili.png',
+    badge: 'silicon.png',
     desc: '硅基流动加速的业界SOTA文档大模型',
     channel: 'silicon',
     apiName: 'PaddlePaddle/PaddleOCR-VL-1.5'
@@ -42,7 +42,7 @@ const MODELS =[
   {
     id: 'sili-deepseek',
     name: 'DeepSeek-OCR',
-    badge: 'sili.png',
+    badge: 'silicon.png',
     desc: '深度求索推出的顶尖视觉文字识别模型',
     channel: 'silicon',
     apiName: 'deepseek-ai/DeepSeek-OCR'
