@@ -14,36 +14,6 @@
   100% { transform: scale(1); }
 }
 
-@keyframes smoothReveal {
-  0% {
-    opacity: 0;
-    transform: translateY(10px);
-    background-position: 0% 50%;
-  }
-  20% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  85% {
-    background-position: 100% 50%;
-    color: transparent;
-    -webkit-text-fill-color: transparent;
-  }
-  95% {
-    color: rgba(29, 29, 31, 0);
-    -webkit-text-fill-color: rgba(29, 29, 31, 0);
-    background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
-    -webkit-background-clip: text;
-    background-clip: text;
-  }
-  100% {
-    opacity: 1;
-    color: #1d1d1f;
-    -webkit-text-fill-color: #1d1d1f;
-    background: none;
-  }
-}
-
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.9); }
   to { opacity: 1; transform: scale(1); }
@@ -120,7 +90,6 @@ header p {
 }
 
 .upload-button {
-  /* 按钮背景 */
   background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
   background-size: 150% 100%;
   color: white;
@@ -134,10 +103,6 @@ header p {
   cursor: pointer;
   display: inline-block;
   text-align: center;
-}
-
-.upload-button::after {
-  display: none;
 }
 
 .upload-button:hover {
@@ -260,11 +225,7 @@ header p {
 .result-text ol {
   width: 100%;
   color: #1d1d1f;
-  -webkit-text-fill-color: #1d1d1f;
   margin: 1rem 0;
-  opacity: 0;
-  animation: fadeIn 0.5s ease-out forwards;
-  animation-delay: 0.3s;
 }
 
 .result-text table {
@@ -279,12 +240,8 @@ header p {
   padding: 12px 16px;
   text-align: left;
   color: #1d1d1f;
-  -webkit-text-fill-color: #1d1d1f;
   word-wrap: break-word;
   vertical-align: top;
-  opacity: 0;
-  animation: smoothReveal 1s ease-out forwards;
-  animation-delay: calc(var(--index) * 50ms);
 }
 
 .result-text p {
@@ -293,7 +250,6 @@ header p {
 }
 
 .gradient-text {
-  color: #1d1d1f;
   position: relative;
   min-height: 50px;
   font-size: 1.1rem;
@@ -304,29 +260,25 @@ header p {
   line-height: 1.6;
 }
 
-/* ================== 修改的内容在这里 ================== */
-.gradient-text p,
-.gradient-text li,
-.gradient-text td,
-.gradient-text th,
-.gradient-text h1,
-.gradient-text h2,
-.gradient-text h3,
-.gradient-text h4,
-.gradient-text h5,
-.gradient-text h6,
-.gradient-text blockquote {
-  opacity: 0;
-  animation: smoothReveal 1s ease-out forwards;
-  animation-delay: calc(var(--index) * 50ms);
-  background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
-  background-size: 300% 100%;
+/* =======================================================================
+   1. 打字机全量渐变效果 (修复：不论任何标签、格式，全部强制染上流动渐变)
+   ======================================================================= */
+.result-text.is-streaming .gradient-text {
+  background: linear-gradient(90deg, #009DFF 0%, #1233E0 50%, #7627E5 100%);
+  background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  line-height: 1.8;
-  margin: 0.8rem 0;
+  animation: gradientMove 2.5s linear infinite;
+}
+
+.result-text.is-streaming .gradient-text * {
+  background: transparent !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  opacity: 1 !important;
+  animation: none !important;
 }
 
 .gradient-text table,
@@ -761,9 +713,6 @@ main.has-content {
   display: inline-block;
   vertical-align: middle;
   margin: 0 0.2em;
-  opacity: 0;
-  animation: smoothReveal 1s ease-out forwards;
-  animation-delay: calc(var(--index) * 50ms);
 }
 .latex-block {
   margin: 1em 0;
@@ -772,9 +721,6 @@ main.has-content {
   display: flex;
   justify-content: center;
   padding: 0.5em 0;
-  opacity: 0;
-  animation: smoothReveal 1s ease-out forwards;
-  animation-delay: calc(var(--index) * 50ms);
 }
 .latex-block .katex-display {
   margin: 0;
@@ -843,46 +789,42 @@ main.has-content {
   .github-link svg { width: 28px; height: 28px; }
 }
 
-.edit-button, .save-button, .cancel-button {
-  padding: 6px 12px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-  white-space: nowrap;
-}
-.edit-button:hover, .save-button:hover, .cancel-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.15);
-}
-.edit-button { background: #ffc107; color: black; }
-.save-button { background: #28a745; color: white; }
-.cancel-button { background: #dc3545; color: white; }
 .editing-area .result-header div {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-/* ================== 修改的内容在这里 ================== */
-.editing-area .gradient-text p,
-.editing-area .gradient-text li,
-.editing-area .gradient-text td,
-.editing-area .gradient-text th,
-.editing-area .gradient-text h1,
-.editing-area .gradient-text h2,
-.editing-area .gradient-text h3,
-.editing-area .gradient-text h4,
-.editing-area .gradient-text h5,
-.editing-area .gradient-text h6,
-.editing-area .gradient-text blockquote {
-  animation: none !important;
-  opacity: 1 !important;
-  background: none !important;
-  color: inherit !important;
-  -webkit-text-fill-color: inherit !important;
+/* =======================================================================
+   2. 切换页面与打字结束时，整个编辑区域“从左向右”擦开渐显并带颜色渐变
+   ======================================================================= */
+.editing-area {
+  animation: editAreaSweep 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
+
+@keyframes editAreaSweep {
+  0% {
+      opacity: 0;
+      clip-path: inset(0 100% 0 0); /* 起始时，完全被隐藏在左侧 */
+      transform: translateX(-20px);
+  }
+  100% {
+      opacity: 1;
+      clip-path: inset(0 0 0 0); /* 结束时，完全展示拉开 */
+      transform: translateX(0);
+  }
+}
+
+.editing-area .edit-content-editable {
+  animation: editTextColorSweep 0.8s ease-out forwards;
+}
+
+@keyframes editTextColorSweep {
+  0% { color: #009DFF; } /* 刚拉开时是流光蓝 */
+  40% { color: #1233E0; } /* 中间过渡到深蓝 */
+  100% { color: #212529; } /* 最终定格为稳重的深灰文本 */
+}
+
 
 .edit-content-editable {
   width: 100%;
@@ -911,23 +853,11 @@ main.has-content {
   box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
 }
 
-.edit-content-editable strong {
-  font-weight: bold;
-}
-.edit-content-editable em {
-  font-style: italic;
-}
-.edit-content-editable p {
-  margin: 0 0 0em 0;
-}
-.edit-content-editable ul,
-.edit-content-editable ol {
-  padding-left: 2em;
-  margin: 0 0 1em 0;
-}
-.edit-content-editable li {
-  margin-bottom: 0.2em;
-}
+.edit-content-editable strong { font-weight: bold; }
+.edit-content-editable em { font-style: italic; }
+.edit-content-editable p { margin: 0 0 0em 0; }
+.edit-content-editable ul, .edit-content-editable ol { padding-left: 2em; margin: 0 0 1em 0; }
+.edit-content-editable li { margin-bottom: 0.2em; }
 .edit-content-editable code {
   background-color: rgba(27, 31, 35, 0.05);
   padding: .2em .4em;
@@ -944,13 +874,7 @@ main.has-content {
   border-radius: 3px;
   margin: 0 0 1em 0;
 }
-.edit-content-editable pre code {
-  padding: 0;
-  margin: 0;
-  font-size: 100%;
-  background-color: transparent;
-  border-radius: 0;
-}
+.edit-content-editable pre code { padding: 0; margin: 0; font-size: 100%; background-color: transparent; border-radius: 0; }
 .edit-content-editable blockquote {
   padding: 0 1em;
   color: #6a737d;
@@ -963,15 +887,8 @@ main.has-content {
   width: auto;
   border-spacing: 0;
 }
-.edit-content-editable th,
-.edit-content-editable td {
-  border: 1px solid #dfe2e5;
-  padding: 6px 13px;
-}
-.edit-content-editable .katex {
-  color: inherit !important;
-  pointer-events: auto;
-}
+.edit-content-editable th, .edit-content-editable td { border: 1px solid #dfe2e5; padding: 6px 13px; }
+.edit-content-editable .katex { color: inherit !important; pointer-events: auto; }
 
 .result-placeholder {
   text-align: center;
@@ -1104,7 +1021,7 @@ main.has-content {
   color: #6e7781;
 }
 
-/* 追加到末尾：修复打字机状态下生成的 Markdown 标题过于巨大导致闪烁突兀 */
+/* 修复打字机状态下生成的 Markdown 标题过于巨大 */
 .gradient-text h1, 
 .gradient-text h2, 
 .gradient-text h3 {
