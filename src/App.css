@@ -523,7 +523,7 @@ main.has-content {
   border-radius: 15px;
   display: flex;
   flex-direction: column;
-  min-height: 180px; 
+  min-height: 80px; 
 }
 
 @media (max-width: 992px) {
