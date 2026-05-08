@@ -518,11 +518,11 @@ main.has-content {
 }
 
 .upload-section.with-image .upload-zone {
-  padding: 1.5rem;
+  padding: 3rem;
   margin-bottom: 1.5rem;
+  min-height: 100px;
   border-radius: 15px;
   display: flex;
-  flex-direction: column;
   min-height: auto;
 }
 
@@ -1039,15 +1039,16 @@ main.has-content {
 .model-dropdown-list {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0; /* 对齐 Wrapper 的最左侧，即从“选择模型”处开始对齐 */
-  width: 100%; /* 宽度撑满整个 Wrapper (字样 + 框体) */
-  min-width: 350px; /* 保证有一个充足的最低宽度 */
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
   background: #fff;
   border: 1px solid rgba(23, 50, 224, 0.15);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   overflow: hidden;
   z-index: 101;
+  text-align: left;
 }
 
 .model-dropdown-item {
