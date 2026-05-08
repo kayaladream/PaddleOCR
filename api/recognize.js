@@ -17,20 +17,37 @@ export default async function handler(req, res) {
     // 渠道一：Aistudio Baidu 
     // ============================================
     if (channel === 'baidu') {
+      // 根据模型读取对应的环境变量，不提供任何硬编码默认值
+      let host;
+      if (modelId === 'baidu-vl-1.5') {
+        host = process.env.PADDLE_OCR_HOST_VL;
+      } else if (modelId === 'baidu-ocrv5') {
+        host = process.env.PADDLE_OCR_HOST_OCR;
+      } else if (modelId === 'baidu-structurev3') {
+        host = process.env.PADDLE_OCR_HOST_STRUCTURE;
+      } else {
+        // 未知模型使用 VL 地址作为兜底
+        host = process.env.PADDLE_OCR_HOST_VL;
+      }
+
+      if (!host) {
+        throw new Error(`环境变量未设置：请配置 ${modelId === 'baidu-ocrv5' ? 'PADDLE_OCR_HOST_OCR' : modelId === 'baidu-structurev3' ? 'PADDLE_OCR_HOST_STRUCTURE' : 'PADDLE_OCR_HOST_VL'} 以及 PADDLE_TOKEN`);
+      }
+
       let url = '';
       let payload = { file: imageData, fileType: 1 };
 
       if (modelId === 'baidu-vl-1.5') {
-        url = 'https://ra96v0pbs0jdt3z6.aistudio-app.com/layout-parsing';
+        url = `${host}/layout-parsing`;
         payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
       } else if (modelId === 'baidu-ocrv5') {
-        url = 'https://zf621chdy2w291t7.aistudio-app.com/ocr';
+        url = `${host}/ocr`;
         payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useTextlineOrientation: false };
       } else if (modelId === 'baidu-structurev3') {
-        url = 'https://v6adbd7ek7geu03e.aistudio-app.com/layout-parsing';
+        url = `${host}/layout-parsing`;
         payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useTextlineOrientation: false, useChartRecognition: false };
       } else {
-        url = 'https://ra96v0pbs0jdt3z6.aistudio-app.com/layout-parsing';
+        url = `${host}/layout-parsing`;
         payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
       }
 
@@ -125,23 +142,14 @@ export default async function handler(req, res) {
       const data = await response.json();
       let rawText = data?.choices?.[0]?.message?.content || '';
 
-      // ====== 强化清洗：兼容所有 LOC 和 ref/det 标记 ======
+      // 清洗坐标标记
       if (rawText) {
-        // 1. 移除整行的 <|ref|>...</|ref|> 和 <|det|>...</|det|>
         rawText = rawText.replace(/^.*<\|ref\|>.*<\/\|ref\|>.*$/gm, '');
         rawText = rawText.replace(/^.*<\|det\|>.*<\/\|det\|>.*$/gm, '');
-        
-        // 2. 移除所有坐标标记（宽松匹配：尖括号内只要包含“LOC”统统删除）
-        //    可匹配：<LOC_221>  <|LOC221|>  <|LOC_221|>  <LOC221> 等
         rawText = rawText.replace(/<\|?LOC[^>]*\|?>/g, '');
-        
-        // 3. 移除零散的 ref/det 标签
         rawText = rawText.replace(/<\|ref\|>/g, '').replace(/<\/\|ref\|>/g, '');
         rawText = rawText.replace(/<\|det\|>/g, '').replace(/<\/\|det\|>/g, '');
-        
-        // 4. 压缩连续的空行（最多保留1个空行）
         rawText = rawText.replace(/\n{3,}/g, '\n\n');
-        
         recognizedText = rawText.trim();
       } else {
         recognizedText = '';
@@ -151,9 +159,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: '不支持的模型渠道' });
     }
 
-    // ============================================
-    // 最终校验并返回
-    // ============================================
     if (!recognizedText || !recognizedText.trim()) {
       return res.json({ text: '> ⚠️ **系统提示：当前图片未检测到任何可识别的文本，或遇到异常无法解析。**' });
     }
