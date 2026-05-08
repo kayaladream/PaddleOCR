@@ -67,28 +67,55 @@ export default async function handler(req, res) {
     else if (channel === 'silicon') {
       const url = 'https://api.siliconflow.cn/v1/chat/completions';
       
-      // 使用 OpenAI 兼容的视觉模型 Payload 格式
+      // ====== 模型专属配置表 (白名单) ======
+      const MODEL_CONFIGS = {
+        'deepseek-ai/DeepSeek-OCR': {
+          userText: '<image>\n<|grounding|>Convert the document to markdown.',
+          temperature: 0.0,
+          top_p: 1.0
+        },
+        'PaddlePaddle/PaddleOCR-VL-1.5': {
+          userText: ' ',   // 仅一个空格，不施加自然语言指令干扰
+          temperature: 0.0,
+          top_p: 1.0
+        }
+        // 未来可以在这里轻松添加更多模型配置
+      };
+
+      // 获取当前模型的专属配置，若找不到则使用安全兜底：不给任何文本指令
+      const config = MODEL_CONFIGS[apiName] || {
+        userText: '',      // 空字符串表示不附加任何文本指令
+        temperature: 0.0,
+        top_p: 1.0
+      };
+
+      // 动态构建 messages
+      const content = [
+        { 
+          type: "image_url", 
+          image_url: { url: `data:${mimeType};base64,${imageData}` } 
+        }
+      ];
+
+      // 仅当配置中提供了文本指令（非空）时才添加 text 部分
+      if (config.userText && config.userText.trim() !== '') {
+        content.push({ 
+          type: "text", 
+          text: config.userText 
+        });
+      }
+
       const payload = {
         model: apiName,
-        messages:[
+        messages: [
           {
             role: "user",
-            content:[
-              { 
-                type: "image_url", 
-                image_url: { url: `data:${mimeType};base64,${imageData}` } 
-              },
-              { 
-                type: "text", 
-                text: "请提取并识别这张图片中的所有文字。如果是文档、排版或表格内容，请使用Markdown格式严格保留原始排版和结构。" 
-              }
-            ]
+            content: content
           }
         ],
-        // ====== 解决“无中生有”幻觉的关键参数 ======
-        temperature: 0.01,  // 极低的温度，拒绝模型自由发挥
-        top_p: 0.1,         // 限制概率分布，强制输出最准确的字词
-        max_tokens: 4096    // 防止长文档因为 token 不足被截断
+        temperature: config.temperature,
+        top_p: config.top_p,
+        max_tokens: 4096
       };
 
       const response = await fetch(url, {
