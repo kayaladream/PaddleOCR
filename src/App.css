@@ -518,12 +518,12 @@ main.has-content {
 }
 
 .upload-section.with-image .upload-zone {
-  padding: 3.5rem 2rem; 
+  padding: 2.5rem 1.5rem; 
   margin-bottom: 1.5rem;
   border-radius: 15px;
   display: flex;
   flex-direction: column;
-  min-height: 80px; 
+  min-height: 100px; 
 }
 
 @media (max-width: 992px) {
