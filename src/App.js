@@ -135,7 +135,7 @@ turndownService.addRule('katex', {
 
 // ====== 并发处理工具 ======
 const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
-  const queue = [...items.entries()];
+  const queue =[...items.entries()];
   const workers = new Array(maxConcurrent).fill().map(async () => {
     while (queue.length > 0) {
       const [realIdx, item] = queue.shift();
@@ -193,12 +193,12 @@ function App() {
   const [resultModels, setResultModels] = useState([]);
   const[currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const[isDragging, setIsDragging] = useState(false);
   const[isDraggingGlobal, setIsDraggingGlobal] = useState(false);
   const dropZoneRef = useRef(null);
   const[showUrlInput, setShowUrlInput] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
-  const [showModal, setShowModal] = useState(false);
+  const[showModal, setShowModal] = useState(false);
   
   // 使用对象状态来单独管理每张图片的 Streaming 状态
   const [streamingStatus, setStreamingStatus] = useState({});
@@ -211,7 +211,7 @@ function App() {
   const editDivRef = useRef(null);
   
   const [selectedModel, setSelectedModel] = useState(MODELS[0]);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const[showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
@@ -225,7 +225,6 @@ function App() {
   },[]);
 
   const typewriterEffect = useCallback((fullText, index, shouldStream) => {
-    // 批量模式（例如处理PDF）下直接关闭打字机动画，提升性能，拒绝闪屏
     if (!shouldStream) {
       setResults(prev => {
         const updated = [...prev];
@@ -240,7 +239,7 @@ function App() {
     const speed = 15;
     const timer = setInterval(() => {
       if (pos < fullText.length) {
-        pos += 2; // 稍稍加速
+        pos += 2; 
         const current = fullText.substring(0, pos);
         setResults(prev => {
           const updated = [...prev];
@@ -282,22 +281,15 @@ function App() {
         }),
       });
 
-      // ==========================================
-      // 【核心修改处】错误捕获及环境变量提示逻辑
-      // ==========================================
       if (!response.ok) {
-        // 先解析出后端的错误信息
         const errorData = await response.json().catch(() => ({ error: '请求失败' }));
 
-        // 1. 如果错误信息中明确指出“环境变量未设置”，直接抛出错误，拒绝自动切换
         if (errorData.error && errorData.error.includes('环境变量未设置')) {
           throw new Error(errorData.error);
         }
 
-        // 2. 对于其他错误，如果当前是 baidu-vl-1.5，则尝试切换到备用模型
         if (selectedModel.id === 'baidu-vl-1.5') {
           isFallback = true;
-          // 当触发 fallback 时，仅在非批量状态下用打字机提前渲染提示语
           if (!isBatch) {
             const warningMsg = "> ⚠️ **系统提示：百度模型调用失败，正在自动切换至硅基流动模型重试...**\n\n";
             setResults(prev => {
@@ -325,7 +317,6 @@ function App() {
             throw new Error(fallbackErrorData.error || '硅基流动模型备用重试也失败了');
           }
         } else {
-          // 如果不是 baidu-vl-1.5 且遇到了其他报错，直接抛出
           throw new Error(errorData.error || '服务异常');
         }
       }
@@ -340,7 +331,6 @@ function App() {
         return updated;
       });
 
-      // 是否开启打字机：仅在单图模式下开启
       typewriterEffect(finalPrefix + finalText, index, !isBatch);
     } catch (error) {
       console.error('识别失败:', error);
@@ -352,9 +342,8 @@ function App() {
       });
       setStreamingStatus(prev => ({ ...prev,[index]: false }));
     }
-  }, [typewriterEffect, selectedModel]);
+  },[typewriterEffect, selectedModel]);
 
-  // 统一处理文件列表（支持 PDF）
   const processFiles = useCallback(async (files) => {
     setIsLoading(true);
     try {
@@ -384,17 +373,16 @@ function App() {
       setResults(prev => [...prev, ...new Array(expandedFiles.length).fill('')]);
       setResultModels(prev => [...prev, ...new Array(expandedFiles.length).fill(null)]);
       setCurrentIndex(startIdx);
-      setIsLoading(false); // 文件解析完成，允许用户翻页，后台并行上传识别
+      setIsLoading(false);
 
-      const isBatch = expandedFiles.length > 1; // 批量模式下不使用打字机
+      const isBatch = expandedFiles.length > 1; 
       await concurrentProcess(expandedFiles, (file, fileIdx) => handleFile(file, startIdx + fileIdx, isBatch), 2);
     } catch (err) {
       alert('处理文件时出错：' + err.message);
       setIsLoading(false);
     }
-  }, [images.length, handleFile]);
+  },[images.length, handleFile]);
 
-  // 粘贴事件
   useEffect(() => {
     const handlePaste = async (e) => {
       if (editDivRef.current?.contains(e.target) || showModal) return;
@@ -472,7 +460,6 @@ function App() {
     }
   };
 
-  // 移除了翻页过程中对 isLoading / isStreaming 的限制，允许后台识别的同时用户随意翻页
   const handlePrevImage = () => {
     if (currentIndex > 0 && !isLoading) setCurrentIndex(currentIndex - 1);
   };
@@ -556,7 +543,7 @@ function App() {
       window.removeEventListener('touchmove', move);
       window.removeEventListener('touchend', end);
     };
-  }, [isDraggingModal, modalOffset]);
+  },[isDraggingModal, modalOffset]);
 
   const handleModalMouseDown = (e) => {
     if (e.target.classList.contains('modal-close') || e.button !== 0) return;
@@ -580,7 +567,6 @@ function App() {
 
   return (
     <div className="app">
-      {/* 隐藏的预加载图片区域，解决徽章延迟加载的问题 */}
       <div style={{ display: 'none' }}>
         {MODELS.map(m => m.badge && <img key={`preload-${m.id}`} src={m.badge} alt="preload" />)}
       </div>
@@ -702,8 +688,9 @@ function App() {
             <div className="result-container">
               {isLoading && !currentIsStreaming && results[currentIndex] == null && <div className="loading result-loading">等待识别...</div>}
 
+              {/* is-streaming 类名包裹正在打字的内容，应用无限流光效果 */}
               {currentIsStreaming && (
-                <div className="result-text">
+                <div className="result-text is-streaming">
                   <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...) {modelInfoText}</span></div>
                   <div className="gradient-text">
                     <ReactMarkdown
@@ -721,8 +708,9 @@ function App() {
                 </div>
               )}
 
+              {/* 关键修改处：给编辑区容器加 key，让它在切换页面和打字结束时重新挂载，从而触发向右扫光的入场动画 */}
               {!currentIsStreaming && results[currentIndex] != null && (
-                <div className="result-text editing-area">
+                <div key={`edit-area-${currentIndex}`} className="result-text editing-area">
                   <div className="result-header">
                     <span>编辑第 {currentIndex + 1} 张图片的结果 {modelInfoText}</span>
                     <button className="copy-button" onClick={handleCopyText}>复制内容</button>
