@@ -518,7 +518,7 @@ main.has-content {
 }
 
 .upload-section.with-image .upload-zone {
-  padding: 1.8rem 1.1rem; 
+  padding: 1.8rem 0.9rem; 
   margin-bottom: 1.5rem;
   border-radius: 15px;
   display: flex;
