@@ -14,13 +14,43 @@
   100% { transform: scale(1); }
 }
 
+/* 这就是你最喜欢的：原来那套优雅的打字机一次性流光 + 沉淀到黑色的动画 */
+@keyframes smoothReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+    background-position: 0% 50%;
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  85% {
+    background-position: 100% 50%;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+  95% {
+    color: rgba(29, 29, 31, 0);
+    -webkit-text-fill-color: rgba(29, 29, 31, 0);
+    background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+  100% {
+    opacity: 1;
+    color: #1d1d1f;
+    -webkit-text-fill-color: #1d1d1f;
+    background: none;
+  }
+}
+
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.9); }
   to { opacity: 1; transform: scale(1); }
 }
 
 body {
-  /* 背景极浅蓝灰 */
   background: linear-gradient(135deg, #F5F8FA 0%, #FFFFFF 100%);
   min-height: 100vh;
   position: relative;
@@ -62,12 +92,10 @@ header {
 header h1 {
   font-size: 2.2rem;
   font-weight: 700;
-  /* 标题颜色 */
   background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: rgba(0, 0, 0, 0);
-  
   margin-bottom: 0.5rem;
   letter-spacing: 1px;
 }
@@ -261,24 +289,20 @@ header p {
 }
 
 /* =======================================================================
-   1. 打字机全量渐变效果 (修复：不论任何标签、格式，全部强制染上流动渐变)
+   1. 完美恢复原来的优雅打字机：这次使用了星号 * ，使得所有输出
+      不论是段落、表格标签、还是奇怪格式，一律无死角覆盖渐变打字效果。
    ======================================================================= */
-.result-text.is-streaming .gradient-text {
-  background: linear-gradient(90deg, #009DFF 0%, #1233E0 50%, #7627E5 100%);
-  background-size: 200% auto;
+.gradient-text > div > * {
+  opacity: 0;
+  animation: smoothReveal 1.2s ease-out forwards;
+  background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
+  background-size: 300% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  animation: gradientMove 2.5s linear infinite;
-}
-
-.result-text.is-streaming .gradient-text * {
-  background: transparent !important;
-  color: transparent !important;
-  -webkit-text-fill-color: transparent !important;
-  opacity: 1 !important;
-  animation: none !important;
+  line-height: 1.8;
+  margin: 0.8rem 0;
 }
 
 .gradient-text table,
@@ -795,36 +819,30 @@ main.has-content {
   flex-wrap: wrap;
 }
 
+
 /* =======================================================================
-   2. 切换页面与打字结束时，整个编辑区域“从左向右”擦开渐显并带颜色渐变
+   2. 翻页专属：只有“文字内容”发生从左到右滑入并附带颜色变换的入场动画
+      外面的编辑白框、滚动条完全保持静止，视觉体验非常舒服！
    ======================================================================= */
-.editing-area {
-  animation: editAreaSweep 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+.edit-content-editable > * {
+  animation: editContentSweep 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  opacity: 0; /* 触发前先隐藏 */
 }
 
-@keyframes editAreaSweep {
+@keyframes editContentSweep {
   0% {
       opacity: 0;
-      clip-path: inset(0 100% 0 0); /* 起始时，完全被隐藏在左侧 */
-      transform: translateX(-20px);
+      clip-path: inset(0 100% 0 0); /* 起始时被从右往左裁剪至完全不可见 */
+      transform: translateX(-10px);
+      color: #009DFF; /* 伴随着流光蓝色进入 */
   }
   100% {
       opacity: 1;
-      clip-path: inset(0 0 0 0); /* 结束时，完全展示拉开 */
+      clip-path: inset(0 0 0 0); /* 展开为全部可见 */
       transform: translateX(0);
+      color: inherit; /* 定格恢复为原始深灰色 */
   }
 }
-
-.editing-area .edit-content-editable {
-  animation: editTextColorSweep 0.8s ease-out forwards;
-}
-
-@keyframes editTextColorSweep {
-  0% { color: #009DFF; } /* 刚拉开时是流光蓝 */
-  40% { color: #1233E0; } /* 中间过渡到深蓝 */
-  100% { color: #212529; } /* 最终定格为稳重的深灰文本 */
-}
-
 
 .edit-content-editable {
   width: 100%;
