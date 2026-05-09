@@ -645,7 +645,7 @@ main.has-content {
   width: 100%;
 }
 
-.image-navigation {
+
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1113,22 +1113,42 @@ main.has-content {
   font-weight: bold;
 }
 
-/* ========== 最终整洁版：导航栏 + 进度指示器 + 状态角标 ========== */
-
-/* 1. 导航栏布局：左箭头、页码、右箭头、进度指示器在同一行，整体居中，进度条靠右 */
+/* ========== 左箭头、页码、右箭头整体居中，进度条靠右 ========== */
 .image-navigation {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;   /* 左中右三列，左右列平分剩余空间 */
   align-items: center;
-  justify-content: center;   /* 让左箭头+页码+右箭头整体居中 */
-  gap: 12px;
+  gap: 0.5rem;
   margin-bottom: 1rem;
-  flex-wrap: nowrap;
   width: 100%;
 }
 
-/* 进度指示器：通过 margin-left: auto 推到最右边，紧凑显示 */
-.progress-indicator {
-  margin-left: auto;          /* 关键：将进度条推到右侧 */
+/* 左箭头：放在第一列，靠左 */
+.image-navigation .nav-button:first-child {
+  justify-self: start;
+}
+
+/* 页码：放在第二列，居中 */
+.image-counter {
+  justify-self: center;
+  font-size: 0.9rem;
+  color: #86868b;
+  min-width: 60px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* 第三列内部：放右箭头和进度条，整体靠右 */
+.image-navigation .nav-button:last-of-type,
+.image-navigation .progress-indicator {
+  display: inline-flex;
+  align-items: center;
+}
+.image-navigation .nav-button:last-of-type {
+  margin-right: 0.5rem;   /* 与进度条的间距 */
+}
+.image-navigation .progress-indicator {
+  margin-left: 0;
   padding: 2px 8px;
   font-size: 0.7rem;
   font-weight: 500;
@@ -1137,16 +1157,6 @@ main.has-content {
   border-radius: 20px;
   white-space: nowrap;
   line-height: 1.4;
-  flex-shrink: 0;
-}
-
-/* 页码样式 */
-.image-counter {
-  font-size: 0.9rem;
-  color: #86868b;
-  min-width: 60px;
-  text-align: center;
-  white-space: nowrap;
 }
 
 /* 左右箭头按钮样式（保持原样） */
@@ -1176,7 +1186,7 @@ main.has-content {
   background: #2A4CF0;
 }
 
-/* 2. 图片状态角标（预览图右上角） */
+/* 图片状态角标（预览图右上角） */
 .image-status-badge {
   position: absolute;
   top: 12px;
@@ -1210,10 +1220,10 @@ main.has-content {
   100% { opacity: 0.7; }
 }
 
-/* 3. 移动端适配 */
+/* 移动端适配 */
 @media (max-width: 768px) {
   .image-navigation {
-    gap: 8px;
+    gap: 0.25rem;
   }
   .image-counter {
     font-size: 0.8rem;
@@ -1224,7 +1234,7 @@ main.has-content {
     height: 32px;
     font-size: 1rem;
   }
-  .progress-indicator {
+  .image-navigation .progress-indicator {
     padding: 2px 6px;
     font-size: 0.6rem;
   }
