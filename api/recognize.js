@@ -88,7 +88,7 @@ export default async function handler(req, res) {
         },
         'PaddlePaddle/PaddleOCR-VL-1.5': {
           // 必须传入显式的指令，即使是尝试让它做全图识别
-          userText: '<image>\n请将图片中的文档内容转换为 Markdown 格式。', 
+          userText: '<image>\n请将图片中的文档内容转换为 Markdown 格式。\n要求：\n- 保留表格，使用 Markdown 表格语法输出\n- 保留公式，使用 LaTeX 语法包裹\n- 不要输出坐标标记，只输出最终 Markdown', 
           temperature: 0.0, // OCR 任务必须降低到 0.0 保证确定性
           top_p: 1.0,
           frequency_penalty: 0.0 // 绝对不能开频率惩罚！
