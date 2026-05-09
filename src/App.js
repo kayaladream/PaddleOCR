@@ -709,8 +709,8 @@ function App() {
               <div className="image-navigation">
                 <button onClick={handlePrevImage} disabled={currentIndex === 0 || isLoading} className="nav-button">←</button>
                 <span className="image-counter">{currentIndex + 1} / {images.length}</span>
-                <span className="progress-indicator">识别进度: {completedCount} / {images.length}</span>
                 <button onClick={handleNextImage} disabled={currentIndex === images.length - 1 || isLoading} className="nav-button">→</button>
+                <span className="progress-indicator">识别进度: {completedCount} / {images.length}</span>
               </div>
               <div className={`image-preview ${isLoading && !results[currentIndex] ? 'loading' : ''}`}>
                 <img
