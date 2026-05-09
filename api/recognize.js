@@ -160,11 +160,6 @@ export default async function handler(req, res) {
         // 匹配逻辑：如果连续出现5个字符以上的片段，且无脑重复了超过4次以上
         // 直接强行截断，并给用户一个友好的占位提示
         // 1. 先处理“重复行”陷阱（防止整个模型死循环输出同一行）
-        rawText = rawText.replace(/(^[^\n]*\n)\1{4,}/gm, (match) => {
-          return match.split('\n')[0] + '\n> *(内容重复，识别已截断)*\n';
-        });
-
-        // 2. 再保留原来的防复读正则，并补充 s 标志（dotAll）以跨行匹配
         rawText = rawText.replace(/(.{5,}?)\1{4,}/gs, '$1\n> *(内容重复，识别已截断)*\n');
 
         recognizedText = rawText.trim();
