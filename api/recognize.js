@@ -147,7 +147,7 @@ export default async function handler(req, res) {
       const data = await response.json();
       let rawText = data?.choices?.[0]?.message?.content || '';
 
-      // 清洗坐标标记及幻觉复读
+      // 清洗坐标标记及多余空行（所有模型通用）
       if (rawText) {
         rawText = rawText.replace(/^.*<\|ref\|>.*<\/\|ref\|>.*$/gm, '');
         rawText = rawText.replace(/^.*<\|det\|>.*<\/\|det\|>.*$/gm, '');
@@ -156,11 +156,15 @@ export default async function handler(req, res) {
         rawText = rawText.replace(/<\|det\|>/g, '').replace(/<\/\|det\|>/g, '');
         rawText = rawText.replace(/\n{3,}/g, '\n\n');
 
-        // 【新增：终极防复读正则拦截器】
-        // 匹配逻辑：如果连续出现5个字符以上的片段，且无脑重复了超过4次以上
-        // 直接强行截断，并给用户一个友好的占位提示
-        // 1. 先处理“重复行”陷阱（防止整个模型死循环输出同一行）
-        rawText = rawText.replace(/(.{5,}?)\1{4,}/gs, '$1\n> *(内容重复，识别已截断)*\n');
+        // “复读”陷阱只针对 PaddleOCR-VL-1.5 启用
+        if (apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
+          // 防止跨行重复片段（5 字符以上重复 ≥5 次）
+          rawText = rawText.replace(/(.{5,}?)\1{4,}/gs, '$1\n> *(内容重复，识别已截断)*\n');
+          // 防止整行重复（长于 15 字符的行重复 ≥5 次，避免误伤表格结构行）
+          rawText = rawText.replace(/(^[^\n]{15,}\n)\1{4,}/gm, (match) => {
+            return match.split('\n')[0] + '\n> *(内容重复，识别已截断)*\n';
+          });
+        }
 
         recognizedText = rawText.trim();
       } else {
