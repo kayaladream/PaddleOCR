@@ -87,11 +87,11 @@ export default async function handler(req, res) {
           frequency_penalty: 0.0
         },
         'PaddlePaddle/PaddleOCR-VL-1.5': {
-          // 听取你的专业意见：保持为空，因为它不吃提示词，输出即最终 Markdown
-          userText: ' ', 
-          temperature: 0.1, // 略微提升温度，避免在死胡同里出不来
-          top_p: 0.95,
-          frequency_penalty: 0.2 // 【底层制裁】：从推理引擎层面强行扣除重复吐字的概率
+          // 必须传入显式的指令，即使是尝试让它做全图识别
+          userText: 'Convert the document to markdown. Or OCR:', 
+          temperature: 0.0, // OCR 任务必须降低到 0.0 保证确定性
+          top_p: 1.0,
+          frequency_penalty: 0.0 // 绝对不能开频率惩罚！
         }
       };
 
