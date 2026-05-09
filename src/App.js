@@ -242,7 +242,7 @@ function App() {
     // 【核心提速修改】：自适应步长算法
     // 保证无论多长的 HTML 表格代码，最多在 60 步（约 0.9 秒）左右全部打完
     // 最低每次蹦 2 个字，表格代码长的时候可能每次蹦 50~100 个字！
-    const step = Math.max(2, Math.ceil(fullText.length / 60));
+    const step = Math.max(2, Math.ceil(fullText.length / 180));
 
     const timer = setInterval(() => {
       if (pos < fullText.length) {
