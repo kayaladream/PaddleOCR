@@ -1273,3 +1273,78 @@ main.has-content {
     font-size: 1rem;
   }
 }
+
+/* 确保导航栏不换行，且进度条紧跟在右箭头右侧 */
+.image-navigation {
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
+  justify-content: center;
+}
+
+/* 进度指示器样式：紧凑，长度自适应内容，靠右 */
+.progress-indicator {
+  margin-left: 12px;          /* 与右箭头保持距离 */
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #2A4CF0;
+  background: rgba(23, 50, 224, 0.08);
+  border-radius: 20px;
+  white-space: nowrap;
+  line-height: 1.4;
+  flex-shrink: 0;             /* 防止被压缩 */
+}
+
+/* 图片状态角标（如果还没有添加过） */
+.image-status-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+  background: rgba(0,0,0,0.6);
+  color: white;
+  z-index: 5;
+  pointer-events: none;
+}
+.image-status-badge.status-streaming {
+  background: #ff9800;
+  color: #2d2d2d;
+  animation: pulse 1.2s infinite;
+}
+.image-status-badge.status-completed {
+  background: #20c997;
+  color: white;
+}
+.image-status-badge.status-pending {
+  background: #6c757d;
+  color: white;
+}
+@keyframes pulse {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; transform: scale(1.02); background: #ffb74d; }
+  100% { opacity: 0.7; }
+}
+
+/* 移动端缩小间距 */
+@media (max-width: 768px) {
+  .progress-indicator {
+    margin-left: 8px;
+    padding: 1px 6px;
+    font-size: 0.6rem;
+  }
+  .image-status-badge {
+    top: 8px;
+    right: 8px;
+    padding: 1px 6px;
+    font-size: 0.6rem;
+  }
+  .nav-button {
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+  }
+}
