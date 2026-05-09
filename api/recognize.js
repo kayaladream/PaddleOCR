@@ -159,7 +159,7 @@ export default async function handler(req, res) {
         // 【新增：终极防复读正则拦截器】
         // 匹配逻辑：如果连续出现5个字符以上的片段，且无脑重复了超过4次以上
         // 直接强行截断，并给用户一个友好的占位提示
-        rawText = rawText.replace(/(.{5,}?)\1{4,}/g, '$1\n> *(表格大片空白导致识别终止)*\n');
+        rawText = rawText.replace(/(.{5,}?)\1{4,}/g, '$1\n> *(内容重复，识别已截断)*\n');
 
         recognizedText = rawText.trim();
       } else {
