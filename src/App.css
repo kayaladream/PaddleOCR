@@ -1176,3 +1176,100 @@ main.has-content {
     right: 8px;
   }
 }
+
+/* 新的导航栏布局（覆盖旧样式） */
+.image-navigation {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  width: 100%;
+}
+
+.nav-left-arrow {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.nav-right-group {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1rem;
+}
+
+.image-counter {
+  font-size: 0.9rem;
+  color: #86868b;
+  min-width: 60px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.progress-indicator {
+  font-size: 0.85rem;
+  color: #2A4CF0;
+  background: rgba(23, 50, 224, 0.1);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* 图片状态角标（新增） */
+.image-status-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+  background: rgba(0,0,0,0.6);
+  color: white;
+  z-index: 5;
+  pointer-events: none;
+}
+.image-status-badge.status-streaming {
+  background: #ff9800;
+  color: #2d2d2d;
+  animation: pulse 1.2s infinite;
+}
+.image-status-badge.status-completed {
+  background: #20c997;
+  color: white;
+}
+.image-status-badge.status-pending {
+  background: #6c757d;
+  color: white;
+}
+@keyframes pulse {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; transform: scale(1.02); background: #ffb74d; }
+  100% { opacity: 0.7; }
+}
+
+/* 移动端响应式调整 */
+@media (max-width: 768px) {
+  .image-navigation {
+    gap: 0.25rem;
+  }
+  .nav-right-group {
+    gap: 0.5rem;
+  }
+  .progress-indicator {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+  }
+  .image-counter {
+    font-size: 0.8rem;
+    min-width: 50px;
+  }
+  .nav-button {
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+  }
+}
