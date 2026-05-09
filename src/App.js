@@ -208,9 +208,6 @@ function App() {
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
 
-  // 控制文字扫光动画
-  const [sweepActive, setSweepActive] = useState(false);
-
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -565,17 +562,6 @@ function App() {
   };
   const currentStatus = getCurrentImageStatus();
 
-  // 切换图片时触发文字扫光动画（仅在非流式、已有结果时触发）
-  useEffect(() => {
-    if (!currentIsStreaming && results[currentIndex] && results[currentIndex].trim() !== '') {
-      setSweepActive(true);
-      const timer = setTimeout(() => setSweepActive(false), 1200);
-      return () => clearTimeout(timer);
-    } else {
-      setSweepActive(false);
-    }
-  }, [currentIndex, results, currentIsStreaming]);
-
   return (
     <div className="app">
       <div style={{ display: 'none' }}>
@@ -686,7 +672,7 @@ function App() {
             <div className="result-container">
               {isLoading && !currentIsStreaming && results[currentIndex] == null && <div className="loading result-loading">等待识别...</div>}
               {currentIsStreaming && (
-                <div className={`result-text ${sweepActive ? 'sweep-animation' : ''}`}>
+                <div className="result-text">
                   <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...) {modelInfoText}</span></div>
                   <div className="gradient-text">
                     <ReactMarkdown
@@ -704,7 +690,7 @@ function App() {
                 </div>
               )}
               {!currentIsStreaming && results[currentIndex] != null && (
-                <div className={`result-text editing-area ${sweepActive ? 'sweep-animation' : ''}`}>
+                <div className="result-text editing-area">
                   <div className="result-header">
                     <span>编辑第 {currentIndex + 1} 张图片的结果 {modelInfoText}</span>
                     <button className="copy-button" onClick={handleCopyText}>复制内容</button>
