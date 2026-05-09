@@ -1164,3 +1164,39 @@ main.has-content {
   .katex { font-size: 1em; }
   .latex-block { max-width: 100%; overflow-x: auto; }
 }
+
+/* 结果区域文字渐变色扫过动画（切换图片时一次性效果，仅非流式状态触发） */
+.result-text.sweep-animation .gradient-text,
+.result-text.sweep-animation .edit-content-editable {
+  animation: sweepGradient 1.2s ease forwards;
+}
+
+@keyframes sweepGradient {
+  0% {
+    background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
+    background-size: 300% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    background-position: 0% 50%;
+  }
+  70% {
+    background-position: 100% 50%;
+    color: transparent;
+  }
+  85% {
+    color: transparent;
+  }
+  100% {
+    background: none;
+    color: #1d1d1f;
+  }
+}
+
+/* 确保编辑模式下的富文本内容也能继承动画效果（可选） */
+.result-text.sweep-animation .edit-content-editable * {
+  background: inherit;
+  background-clip: inherit;
+  -webkit-background-clip: inherit;
+  color: transparent;
+}
