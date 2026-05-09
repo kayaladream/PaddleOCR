@@ -73,7 +73,7 @@ export default async function handler(req, res) {
       }
     } 
 
-    // ============================================
+// ============================================
     // 渠道二：硅基流动 (SiliconFlow)
     // ============================================
     else if (channel === 'silicon') {
@@ -83,22 +83,26 @@ export default async function handler(req, res) {
         'deepseek-ai/DeepSeek-OCR': {
           userText: '<image>\nConvert the document to markdown.',
           temperature: 0.0,
-          top_p: 1.0
+          top_p: 1.0,
+          frequency_penalty: 0.0
         },
         'PaddlePaddle/PaddleOCR-VL-1.5': {
-          userText: ' ',
-          temperature: 0.0,
-          top_p: 1.0
+          // 听取你的专业意见：保持为空，因为它不吃提示词，输出即最终 Markdown
+          userText: ' ', 
+          temperature: 0.1, // 略微提升温度，避免在死胡同里出不来
+          top_p: 0.95,
+          frequency_penalty: 0.2 // 【底层制裁】：从推理引擎层面强行扣除重复吐字的概率
         }
       };
 
       const config = MODEL_CONFIGS[apiName] || {
         userText: '',
         temperature: 0.0,
-        top_p: 1.0
+        top_p: 1.0,
+        frequency_penalty: 0.0
       };
 
-      const content = [
+      const content =[
         { 
           type: "image_url", 
           image_url: { url: `data:${mimeType};base64,${imageData}` } 
@@ -114,7 +118,7 @@ export default async function handler(req, res) {
 
       const payload = {
         model: apiName,
-        messages: [
+        messages:[
           {
             role: "user",
             content: content
@@ -122,6 +126,7 @@ export default async function handler(req, res) {
         ],
         temperature: config.temperature,
         top_p: config.top_p,
+        frequency_penalty: config.frequency_penalty, // 传入频率惩罚参数
         max_tokens: 4096
       };
 
@@ -142,7 +147,7 @@ export default async function handler(req, res) {
       const data = await response.json();
       let rawText = data?.choices?.[0]?.message?.content || '';
 
-      // 清洗坐标标记
+      // 清洗坐标标记及幻觉复读
       if (rawText) {
         rawText = rawText.replace(/^.*<\|ref\|>.*<\/\|ref\|>.*$/gm, '');
         rawText = rawText.replace(/^.*<\|det\|>.*<\/\|det\|>.*$/gm, '');
@@ -150,11 +155,17 @@ export default async function handler(req, res) {
         rawText = rawText.replace(/<\|ref\|>/g, '').replace(/<\/\|ref\|>/g, '');
         rawText = rawText.replace(/<\|det\|>/g, '').replace(/<\/\|det\|>/g, '');
         rawText = rawText.replace(/\n{3,}/g, '\n\n');
+
+        // 【新增：终极防复读正则拦截器】
+        // 匹配逻辑：如果连续出现5个字符以上的片段，且无脑重复了超过4次以上
+        // 直接强行截断，并给用户一个友好的占位提示
+        rawText = rawText.replace(/(.{5,}?)\1{4,}/g, '$1\n> *(表格大片空白导致识别终止)*\n');
+
         recognizedText = rawText.trim();
       } else {
         recognizedText = '';
       }
-    } 
+    }
     else {
       return res.status(400).json({ error: '不支持的模型渠道' });
     }
