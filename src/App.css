@@ -1113,92 +1113,34 @@ main.has-content {
   font-weight: bold;
 }
 
-/* 进度指示器样式 */
-.progress-indicator {
-  font-size: 0.85rem;
-  color: #2A4CF0;
-  background: rgba(23, 50, 224, 0.1);
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-weight: 500;
-  margin-left: 12px;
-  white-space: nowrap;
-}
+/* ========== 最终整洁版：导航栏 + 进度指示器 + 状态角标 ========== */
 
-/* 图片状态角标 */
-.image-status-badge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  backdrop-filter: blur(4px);
-  background: rgba(0,0,0,0.6);
-  color: white;
-  z-index: 5;
-  pointer-events: none;
-}
-
-.image-status-badge.status-streaming {
-  background: #ff9800;
-  color: #2d2d2d;
-  animation: pulse 1.2s infinite;
-}
-
-.image-status-badge.status-completed {
-  background: #20c997;
-  color: white;
-}
-
-.image-status-badge.status-pending {
-  background: #6c757d;
-  color: white;
-}
-
-@keyframes pulse {
-  0% { opacity: 0.7; }
-  50% { opacity: 1; transform: scale(1.02); background: #ffb74d; }
-  100% { opacity: 0.7; }
-}
-
-@media (max-width: 768px) {
-  .progress-indicator {
-    font-size: 0.7rem;
-    padding: 2px 6px;
-    margin-left: 6px;
-  }
-  .image-status-badge {
-    font-size: 0.65rem;
-    padding: 2px 8px;
-    top: 8px;
-    right: 8px;
-  }
-}
-
-/* 新的导航栏布局（覆盖旧样式） */
+/* 1. 导航栏布局：左箭头、页码、右箭头、进度指示器在同一行，整体居中，进度条靠右 */
 .image-navigation {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;   /* 让左箭头+页码+右箭头整体居中 */
+  gap: 12px;
   margin-bottom: 1rem;
+  flex-wrap: nowrap;
   width: 100%;
 }
 
-.nav-left-arrow {
-  display: flex;
-  justify-content: flex-start;
+/* 进度指示器：通过 margin-left: auto 推到最右边，紧凑显示 */
+.progress-indicator {
+  margin-left: auto;          /* 关键：将进度条推到右侧 */
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #2A4CF0;
+  background: rgba(23, 50, 224, 0.08);
+  border-radius: 20px;
+  white-space: nowrap;
+  line-height: 1.4;
+  flex-shrink: 0;
 }
 
-.nav-right-group {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 1rem;
-}
-
+/* 页码样式 */
 .image-counter {
   font-size: 0.9rem;
   color: #86868b;
@@ -1207,17 +1149,34 @@ main.has-content {
   white-space: nowrap;
 }
 
-.progress-indicator {
-  font-size: 0.85rem;
-  color: #2A4CF0;
-  background: rgba(23, 50, 224, 0.1);
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-weight: 500;
-  white-space: nowrap;
+/* 左右箭头按钮样式（保持原样） */
+.nav-button {
+  background: rgb(23, 50, 224);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  font-size: 1.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+.nav-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.nav-button:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(23, 50, 224, 0.3);
+  background: #2A4CF0;
 }
 
-/* 图片状态角标（新增） */
+/* 2. 图片状态角标（预览图右上角） */
 .image-status-badge {
   position: absolute;
   top: 12px;
@@ -1251,17 +1210,10 @@ main.has-content {
   100% { opacity: 0.7; }
 }
 
-/* 移动端响应式调整 */
+/* 3. 移动端适配 */
 @media (max-width: 768px) {
   .image-navigation {
-    gap: 0.25rem;
-  }
-  .nav-right-group {
-    gap: 0.5rem;
-  }
-  .progress-indicator {
-    font-size: 0.7rem;
-    padding: 2px 6px;
+    gap: 8px;
   }
   .image-counter {
     font-size: 0.8rem;
@@ -1272,79 +1224,14 @@ main.has-content {
     height: 32px;
     font-size: 1rem;
   }
-}
-
-/* 确保导航栏不换行，且进度条紧跟在右箭头右侧 */
-.image-navigation {
-  flex-wrap: nowrap !important;
-  overflow-x: auto;
-  justify-content: center;
-}
-
-/* 进度指示器样式：紧凑，长度自适应内容，靠右 */
-.progress-indicator {
-  margin-left: 12px;          /* 与右箭头保持距离 */
-  padding: 2px 8px;
-  font-size: 0.7rem;
-  font-weight: 500;
-  color: #2A4CF0;
-  background: rgba(23, 50, 224, 0.08);
-  border-radius: 20px;
-  white-space: nowrap;
-  line-height: 1.4;
-  flex-shrink: 0;             /* 防止被压缩 */
-}
-
-/* 图片状态角标（如果还没有添加过） */
-.image-status-badge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  padding: 2px 8px;
-  border-radius: 20px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  backdrop-filter: blur(4px);
-  background: rgba(0,0,0,0.6);
-  color: white;
-  z-index: 5;
-  pointer-events: none;
-}
-.image-status-badge.status-streaming {
-  background: #ff9800;
-  color: #2d2d2d;
-  animation: pulse 1.2s infinite;
-}
-.image-status-badge.status-completed {
-  background: #20c997;
-  color: white;
-}
-.image-status-badge.status-pending {
-  background: #6c757d;
-  color: white;
-}
-@keyframes pulse {
-  0% { opacity: 0.7; }
-  50% { opacity: 1; transform: scale(1.02); background: #ffb74d; }
-  100% { opacity: 0.7; }
-}
-
-/* 移动端缩小间距 */
-@media (max-width: 768px) {
   .progress-indicator {
-    margin-left: 8px;
-    padding: 1px 6px;
+    padding: 2px 6px;
     font-size: 0.6rem;
   }
   .image-status-badge {
     top: 8px;
     right: 8px;
-    padding: 1px 6px;
-    font-size: 0.6rem;
-  }
-  .nav-button {
-    width: 32px;
-    height: 32px;
-    font-size: 1rem;
+    padding: 2px 8px;
+    font-size: 0.65rem;
   }
 }
