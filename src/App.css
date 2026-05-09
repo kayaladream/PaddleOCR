@@ -1112,14 +1112,3 @@ main.has-content {
   margin: 0.5rem 0;
   font-weight: bold;
 }
-
-/* 让打字机阶段所有文字都应用渐变动画 */
-.gradient-text,
-.gradient-text * {
-  background: linear-gradient(90deg, #009DFF 0.16%, #1233E0 49.91%, #7627E5 99.81%);
-  background-size: 300% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: gradientMove 3s linear infinite !important;
-}
