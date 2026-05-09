@@ -225,7 +225,7 @@ function App() {
   },[]);
 
   const typewriterEffect = useCallback((fullText, index, shouldStream) => {
-    // 批量模式（例如处理PDF）下直接关闭打字机动画，提升性能，拒绝闪屏
+    // 批量模式直接关闭打字机动画
     if (!shouldStream) {
       setResults(prev => {
         const updated = [...prev];
@@ -237,10 +237,16 @@ function App() {
     }
 
     let pos = 0;
-    const speed = 15;
+    const speed = 15; // 刷新帧率：15毫秒
+    
+    // 【核心提速修改】：自适应步长算法
+    // 保证无论多长的 HTML 表格代码，最多在 60 步（约 0.9 秒）左右全部打完
+    // 最低每次蹦 2 个字，表格代码长的时候可能每次蹦 50~100 个字！
+    const step = Math.max(2, Math.ceil(fullText.length / 60));
+
     const timer = setInterval(() => {
       if (pos < fullText.length) {
-        pos += 2; // 稍稍加速
+        pos += step; // 使用动态计算出的极速步长
         const current = fullText.substring(0, pos);
         setResults(prev => {
           const updated = [...prev];
@@ -253,7 +259,7 @@ function App() {
       }
     }, speed);
     return () => clearInterval(timer);
-  },[]);
+  },
 
   const handleFile = useCallback(async (file, index, isBatch = false) => {
     if (!file.type.startsWith('image/')) return;
