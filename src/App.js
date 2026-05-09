@@ -259,7 +259,7 @@ function App() {
       }
     }, speed);
     return () => clearInterval(timer);
-  },
+  },[]);
 
   const handleFile = useCallback(async (file, index, isBatch = false) => {
     if (!file.type.startsWith('image/')) return;
