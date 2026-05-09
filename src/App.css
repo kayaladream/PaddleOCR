@@ -1112,3 +1112,67 @@ main.has-content {
   margin: 0.5rem 0;
   font-weight: bold;
 }
+
+/* 进度指示器样式 */
+.progress-indicator {
+  font-size: 0.85rem;
+  color: #2A4CF0;
+  background: rgba(23, 50, 224, 0.1);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+  margin-left: 12px;
+  white-space: nowrap;
+}
+
+/* 图片状态角标 */
+.image-status-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+  background: rgba(0,0,0,0.6);
+  color: white;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.image-status-badge.status-streaming {
+  background: #ff9800;
+  color: #2d2d2d;
+  animation: pulse 1.2s infinite;
+}
+
+.image-status-badge.status-completed {
+  background: #20c997;
+  color: white;
+}
+
+.image-status-badge.status-pending {
+  background: #6c757d;
+  color: white;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; transform: scale(1.02); background: #ffb74d; }
+  100% { opacity: 0.7; }
+}
+
+@media (max-width: 768px) {
+  .progress-indicator {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    margin-left: 6px;
+  }
+  .image-status-badge {
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    top: 8px;
+    right: 8px;
+  }
+}
