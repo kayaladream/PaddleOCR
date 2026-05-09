@@ -203,6 +203,10 @@ function App() {
   // 使用对象状态来单独管理每张图片的 Streaming 状态
   const [streamingStatus, setStreamingStatus] = useState({});
   
+  // ---- 新增：进度计数相关 ----
+  const [completedCount, setCompletedCount] = useState(0);
+  const completedIndicesRef = useRef(new Set()); // 防止重复计数
+  
   const[isDraggingModal, setIsDraggingModal] = useState(false);
   const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
   const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
@@ -261,6 +265,14 @@ function App() {
     return () => clearInterval(timer);
   },[]);
 
+  // 标记某张图片已处理完成（成功或失败）
+  const markComplete = useCallback((index) => {
+    if (!completedIndicesRef.current.has(index)) {
+      completedIndicesRef.current.add(index);
+      setCompletedCount(prev => prev + 1);
+    }
+  }, []);
+
   const handleFile = useCallback(async (file, index, isBatch = false) => {
     if (!file.type.startsWith('image/')) return;
 
@@ -288,22 +300,15 @@ function App() {
         }),
       });
 
-      // ==========================================
-      // 【核心修改处】错误捕获及环境变量提示逻辑
-      // ==========================================
       if (!response.ok) {
-        // 先解析出后端的错误信息
         const errorData = await response.json().catch(() => ({ error: '请求失败' }));
 
-        // 1. 如果错误信息中明确指出“环境变量未设置”，直接抛出错误，拒绝自动切换
         if (errorData.error && errorData.error.includes('环境变量未设置')) {
           throw new Error(errorData.error);
         }
 
-        // 2. 对于其他错误，如果当前是 baidu-vl-1.5，则尝试切换到备用模型
         if (selectedModel.id === 'baidu-vl-1.5') {
           isFallback = true;
-          // 当触发 fallback 时，仅在非批量状态下用打字机提前渲染提示语
           if (!isBatch) {
             const warningMsg = "> ⚠️ **系统提示：百度模型调用失败，正在自动切换至硅基流动模型重试...**\n\n";
             setResults(prev => {
@@ -331,7 +336,6 @@ function App() {
             throw new Error(fallbackErrorData.error || '硅基流动模型备用重试也失败了');
           }
         } else {
-          // 如果不是 baidu-vl-1.5 且遇到了其他报错，直接抛出
           throw new Error(errorData.error || '服务异常');
         }
       }
@@ -348,6 +352,7 @@ function App() {
 
       // 是否开启打字机：仅在单图模式下开启
       typewriterEffect(finalPrefix + finalText, index, !isBatch);
+      markComplete(index);  // 成功完成后计数
     } catch (error) {
       console.error('识别失败:', error);
       const errMsg = `> ⚠️ **系统提示：图片处理失败**\n>\n> ${error.message}`;
@@ -357,8 +362,9 @@ function App() {
         return updated;
       });
       setStreamingStatus(prev => ({ ...prev,[index]: false }));
+      markComplete(index);  // 失败也要计数，避免进度卡死
     }
-  }, [typewriterEffect, selectedModel]);
+  }, [typewriterEffect, selectedModel, markComplete]);
 
   // 统一处理文件列表（支持 PDF）
   const processFiles = useCallback(async (files) => {
@@ -390,6 +396,12 @@ function App() {
       setResults(prev => [...prev, ...new Array(expandedFiles.length).fill('')]);
       setResultModels(prev => [...prev, ...new Array(expandedFiles.length).fill(null)]);
       setCurrentIndex(startIdx);
+      
+      // 重置进度计数相关的 ref 和 state (新上传的文件会追加，旧图片的完成状态应保留)
+      // 为了用户体验，我们不清零，而是让 completedCount 随着新图片完成而增加。
+      // 但如果完全重置旧进度会丢失之前的结果，因此保留现有 completedIndicesRef 和 completedCount，
+      // 新图片的完成会继续累加。这样更符合直觉。
+      
       setIsLoading(false); // 文件解析完成，允许用户翻页，后台并行上传识别
 
       const isBatch = expandedFiles.length > 1; // 批量模式下不使用打字机
@@ -584,6 +596,15 @@ function App() {
   const currentIsStreaming = streamingStatus[currentIndex] || false;
   const showResultsSection = images.length > 0 || isLoading || Object.values(streamingStatus).some(v => v);
 
+  // 获取当前图片的状态文本和样式类（用于角标）
+  const getCurrentImageStatus = () => {
+    if (streamingStatus[currentIndex]) return { text: '识别中', className: 'status-streaming' };
+    if (results[currentIndex] && results[currentIndex].trim().length > 0) return { text: '已完成', className: 'status-completed' };
+    if (results[currentIndex] === '' && !streamingStatus[currentIndex]) return { text: '等待中', className: 'status-pending' };
+    return { text: '未开始', className: 'status-pending' };
+  };
+  const currentStatus = getCurrentImageStatus();
+
   return (
     <div className="app">
       {/* 隐藏的预加载图片区域，解决徽章延迟加载的问题 */}
@@ -688,6 +709,7 @@ function App() {
               <div className="image-navigation">
                 <button onClick={handlePrevImage} disabled={currentIndex === 0 || isLoading} className="nav-button">←</button>
                 <span className="image-counter">{currentIndex + 1} / {images.length}</span>
+                <span className="progress-indicator">识别进度: {completedCount} / {images.length}</span>
                 <button onClick={handleNextImage} disabled={currentIndex === images.length - 1 || isLoading} className="nav-button">→</button>
               </div>
               <div className={`image-preview ${isLoading && !results[currentIndex] ? 'loading' : ''}`}>
@@ -695,6 +717,12 @@ function App() {
                   key={images[currentIndex]} src={images[currentIndex]} alt={`预览 ${currentIndex + 1}`} onClick={() => { if (images[currentIndex]) { setModalPosition({ x: 0, y: 0 }); setModalScale(1); setShowModal(true); } }} style={{ cursor: images[currentIndex] ? 'zoom-in' : 'default' }}
                   onError={(e) => { console.error("加载图片失败:", images[currentIndex]); e.target.alt = '图片加载失败'; e.target.style.display = 'none'; e.target.closest('.image-preview')?.classList.add('load-error'); }}
                 />
+                {/* 状态角标 */}
+                {images[currentIndex] && (
+                  <div className={`image-status-badge ${currentStatus.className}`}>
+                    {currentStatus.text}
+                  </div>
+                )}
                 {((isLoading && !results[currentIndex]) || currentIsStreaming) && (
                   <div className="loading-overlay">{currentIsStreaming ? '识别中...' : '处理中...'}</div>
                 )}
