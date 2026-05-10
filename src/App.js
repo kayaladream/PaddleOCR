@@ -267,19 +267,15 @@ function App() {
       });
 
       const imageData = await fileToBase64(file);
-    
+
       let response;
       let lastError = null;
 
-      // 仅在百度渠道启用重试，并在每次重试时更新提示
       const maxRetries = selectedModel.channel === 'baidu' ? 3 : 1;
-      let response;
-      let lastError = null;
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           if (attempt > 1) {
-            // 非首次尝试：显示重试状态
             setResults(prev => {
               const updated = [...prev];
               updated[index] = `> 🔄 **正在重试（${attempt}/${maxRetries}）...**`;
@@ -304,18 +300,15 @@ function App() {
             throw new Error(errorData.error || '服务异常');
           }
 
-          // 请求成功，跳出重试循环
           break;
         } catch (err) {
           lastError = err;
           if (attempt < maxRetries) {
-            // 等待10秒后重试
             await new Promise(resolve => setTimeout(resolve, 10000));
           }
         }
       }
 
-      // 所有重试均失败
       if (!response || !response.ok) {
         throw lastError || new Error('请求失败');
       }
