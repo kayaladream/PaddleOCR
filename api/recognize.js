@@ -74,26 +74,40 @@ export default async function handler(req, res) {
     } 
 
     // ============================================
-    // 渠道二：硅基流动 (SiliconFlow)
+    // 渠道二：硅基流动 (SiliconFlow) —— 方案二最佳实践
     // ============================================
     else if (channel === 'silicon') {
       const url = 'https://api.siliconflow.cn/v1/chat/completions';
 
-      // 新版配置：不预设任何参数，让模型完全使用服务端默认值
+      // 针对 DeepSeek-OCR 和 PaddleOCR-VL-1.5 的官方推荐配置
       const MODEL_CONFIGS = {
         'deepseek-ai/DeepSeek-OCR': {
-          userText: ''        // 空字符串 = 不附加任何文本提示
-          // 不设置 temperature / top_p / frequency_penalty
+          // 关键：加入 <|grounding|> 标记触发文档解析模式
+          userText: '<image>\n<|grounding|>Convert the document to markdown.',
+          temperature: 0.0,
+          top_p: 1.0,
+          frequency_penalty: 0.2,   // 轻度惩罚重复
+          presence_penalty: 0.1     // 轻微惩罚已出现token
         },
         'PaddlePaddle/PaddleOCR-VL-1.5': {
-          userText: ''
+          // PaddleOCR 通常不吃复杂 prompt，保持简洁
+          userText: '<image>\nFree OCR.',
+          temperature: 0.0,
+          top_p: 1.0,
+          frequency_penalty: 0.2,
+          presence_penalty: 0.1
         }
       };
 
-      // 如果模型不在配置中，也按空配置处理
-      const config = MODEL_CONFIGS[apiName] || { userText: '' };
+      const config = MODEL_CONFIGS[apiName] || {
+        userText: '<image>\nFree OCR.',
+        temperature: 0.0,
+        top_p: 1.0,
+        frequency_penalty: 0.2,
+        presence_penalty: 0.1
+      };
 
-      // 构建消息内容：只放图片
+      // 构建 messages
       const content = [
         {
           type: "image_url",
@@ -101,7 +115,6 @@ export default async function handler(req, res) {
         }
       ];
 
-      // 只有当 userText 非空时才追加文本提示
       if (config.userText && config.userText.trim() !== '') {
         content.push({
           type: "text",
@@ -109,29 +122,19 @@ export default async function handler(req, res) {
         });
       }
 
-      // 基础载荷，只有 model / messages / max_tokens
       const payload = {
         model: apiName,
-        messages: [
-          {
-            role: "user",
-            content: content
-          }
-        ],
+        messages: [{ role: "user", content }],
         max_tokens: 4096
       };
 
-      // 【关键】只在明确提供了参数时才添加到 payload 中
-      if (config.temperature !== undefined) {
-        payload.temperature = config.temperature;
-      }
-      if (config.top_p !== undefined) {
-        payload.top_p = config.top_p;
-      }
-      if (config.frequency_penalty !== undefined) {
-        payload.frequency_penalty = config.frequency_penalty;
-      }
+      // 只在提供具体值时传入参数
+      if (config.temperature !== undefined) payload.temperature = config.temperature;
+      if (config.top_p !== undefined) payload.top_p = config.top_p;
+      if (config.frequency_penalty !== undefined) payload.frequency_penalty = config.frequency_penalty;
+      if (config.presence_penalty !== undefined) payload.presence_penalty = config.presence_penalty;
 
+      // 后续 fetch 和清洗逻辑保持原样...
       const response = await fetch(url, {
         method: 'POST',
         headers: {
