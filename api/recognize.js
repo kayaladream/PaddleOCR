@@ -92,8 +92,8 @@ export default async function handler(req, res) {
           userText: '<image>\nFree OCR.',
           temperature: 0.0,
           top_p: 1.0,
-          frequency_penalty: 0.6,
-          presence_penalty: 0.3
+          frequency_penalty: 0.8,
+          presence_penalty: 0.5
         }
       };
 
