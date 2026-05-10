@@ -73,57 +73,64 @@ export default async function handler(req, res) {
       }
     } 
 
-// ============================================
+    // ============================================
     // 渠道二：硅基流动 (SiliconFlow)
     // ============================================
     else if (channel === 'silicon') {
       const url = 'https://api.siliconflow.cn/v1/chat/completions';
-      
+
+      // 新版配置：不预设任何参数，让模型完全使用服务端默认值
       const MODEL_CONFIGS = {
         'deepseek-ai/DeepSeek-OCR': {
-          // 不提供任何文本提示，完全依赖模型视觉理解
-          userText: '',
-          // 不预设参数，让 API 使用默认值（温度约 0.7 等）
+          userText: ''        // 空字符串 = 不附加任何文本提示
+          // 不设置 temperature / top_p / frequency_penalty
         },
         'PaddlePaddle/PaddleOCR-VL-1.5': {
-          userText: '',
+          userText: ''
         }
       };
 
-      const config = MODEL_CONFIGS[apiName] || {
-        userText: '',
-        temperature: 0.0,
-        top_p: 1.0,
-        frequency_penalty: 0.0
-      };
+      // 如果模型不在配置中，也按空配置处理
+      const config = MODEL_CONFIGS[apiName] || { userText: '' };
 
-      const content =[
-        { 
-          type: "image_url", 
-          image_url: { url: `data:${mimeType};base64,${imageData}` } 
+      // 构建消息内容：只放图片
+      const content = [
+        {
+          type: "image_url",
+          image_url: { url: `data:${mimeType};base64,${imageData}` }
         }
       ];
 
+      // 只有当 userText 非空时才追加文本提示
       if (config.userText && config.userText.trim() !== '') {
-        content.push({ 
-          type: "text", 
-          text: config.userText 
+        content.push({
+          type: "text",
+          text: config.userText
         });
       }
 
+      // 基础载荷，只有 model / messages / max_tokens
       const payload = {
         model: apiName,
-        messages:[
+        messages: [
           {
             role: "user",
             content: content
           }
         ],
-        temperature: config.temperature,
-        top_p: config.top_p,
-        frequency_penalty: config.frequency_penalty, // 传入频率惩罚参数
         max_tokens: 4096
       };
+
+      // 【关键】只在明确提供了参数时才添加到 payload 中
+      if (config.temperature !== undefined) {
+        payload.temperature = config.temperature;
+      }
+      if (config.top_p !== undefined) {
+        payload.top_p = config.top_p;
+      }
+      if (config.frequency_penalty !== undefined) {
+        payload.frequency_penalty = config.frequency_penalty;
+      }
 
       const response = await fetch(url, {
         method: 'POST',
@@ -142,7 +149,7 @@ export default async function handler(req, res) {
       const data = await response.json();
       let rawText = data?.choices?.[0]?.message?.content || '';
 
-      // 清洗坐标标记及多余空行（所有模型通用）
+      // 保留你原有的清洗逻辑（坐标标记、防复读等）
       if (rawText) {
         rawText = rawText.replace(/^.*<\|ref\|>.*<\/\|ref\|>.*$/gm, '');
         rawText = rawText.replace(/^.*<\|det\|>.*<\/\|det\|>.*$/gm, '');
@@ -151,15 +158,8 @@ export default async function handler(req, res) {
         rawText = rawText.replace(/<\|det\|>/g, '').replace(/<\/\|det\|>/g, '');
         rawText = rawText.replace(/\n{3,}/g, '\n\n');
 
-        // “复读”陷阱只针对 PaddleOCR-VL-1.5 启用
-        if (apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
-          // 防止跨行重复片段（5 字符以上重复 ≥5 次）
-          rawText = rawText.replace(/(.{5,}?)\1{4,}/gs, '$1\n> *(内容重复，识别已截断)*\n');
-          // 防止整行重复（长于 15 字符的行重复 ≥5 次，避免误伤表格结构行）
-          rawText = rawText.replace(/(^[^\n]{15,}\n)\1{4,}/gm, (match) => {
-            return match.split('\n')[0] + '\n> *(内容重复，识别已截断)*\n';
-          });
-        }
+        // 如果你之前觉得防复读正则可能误伤，建议先保留观察，或者临时注释掉测试
+        // rawText = rawText.replace(/(.{5,}?)\1{4,}/g, '$1\n> *(表格大片空白导致识别终止)*\n');
 
         recognizedText = rawText.trim();
       } else {
