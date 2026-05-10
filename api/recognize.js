@@ -79,18 +79,16 @@ export default async function handler(req, res) {
     else if (channel === 'silicon') {
       const url = 'https://api.siliconflow.cn/v1/chat/completions';
 
-      // 针对 DeepSeek-OCR 和 PaddleOCR-VL-1.5 的官方推荐配置
       const MODEL_CONFIGS = {
         'deepseek-ai/DeepSeek-OCR': {
-          // 关键：加入 <|grounding|> 标记触发文档解析模式
-          userText: '<image>\n<|grounding|>Convert the document to markdown.',
+          // 关键：必须使用 Free OCR. 模式，避免输出坐标 token
+          userText: '<image>\nFree OCR.',
           temperature: 0.0,
           top_p: 1.0,
-          frequency_penalty: 0.2,   // 轻度惩罚重复
-          presence_penalty: 0.1     // 轻微惩罚已出现token
+          frequency_penalty: 0.2,
+          presence_penalty: 0.1
         },
         'PaddlePaddle/PaddleOCR-VL-1.5': {
-          // PaddleOCR 通常不吃复杂 prompt，保持简洁
           userText: '<image>\nFree OCR.',
           temperature: 0.0,
           top_p: 1.0,
