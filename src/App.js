@@ -259,70 +259,70 @@ function App() {
     if (!file.type.startsWith('image/')) return;
     try {
       setStreamingStatus(prev => ({ ...prev, [index]: true }));
+      // 开始识别前先将对应位置清空，避免显示旧结果
       setResults(prev => {
         const newResults = [...prev];
         newResults[index] = '';
         return newResults;
       });
+
       const imageData = await fileToBase64(file);
+    
       let response;
-      let isFallback = false;
-      response = await fetch('/api/recognize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageData,
-          mimeType: file.type,
-          modelId: selectedModel.id,
-          channel: selectedModel.channel,
-          apiName: selectedModel.apiName
-        }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: '请求失败' }));
-        if (errorData.error && errorData.error.includes('环境变量未设置')) {
-          throw new Error(errorData.error);
-        }
-        if (selectedModel.id === 'baidu-vl-1.5') {
-          isFallback = true;
-          if (!isBatch) {
-            const warningMsg = "> ⚠️ **系统提示：百度模型调用失败，正在自动切换至硅基流动模型重试...**\n\n";
-            setResults(prev => {
-              const updated = [...prev];
-              updated[index] = warningMsg;
-              return updated;
-            });
-          }
-          const fallbackModel = MODELS.find(m => m.id === 'sili-vl-1.5');
+      let lastError = null;
+
+      // 仅对百度渠道启用重试（最多3次，每次等10秒）
+      const maxRetries = selectedModel.channel === 'baidu' ? 3 : 1;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
           response = await fetch('/api/recognize', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               imageData,
               mimeType: file.type,
-              modelId: fallbackModel.id,
-              channel: fallbackModel.channel,
-              apiName: fallbackModel.apiName
+              modelId: selectedModel.id,
+              channel: selectedModel.channel,
+              apiName: selectedModel.apiName
             }),
           });
+
           if (!response.ok) {
-            const fallbackErrorData = await response.json().catch(() => ({ error: '硅基流动备用请求失败' }));
-            throw new Error(fallbackErrorData.error || '硅基流动模型备用重试也失败了');
+            const errorData = await response.json().catch(() => ({ error: '请求失败' }));
+            throw new Error(errorData.error || '服务异常');
           }
-        } else {
-          throw new Error(errorData.error || '服务异常');
+
+          // 请求成功，跳出重试循环
+          break;
+        } catch (err) {
+          lastError = err;
+          if (attempt < maxRetries) {
+            // 等待10秒后重试
+            await new Promise(resolve => setTimeout(resolve, 10000));
+          }
         }
       }
+
+      // 所有重试均失败
+      if (!response || !response.ok) {
+        throw lastError || new Error('请求失败');
+      }
+
       const data = await response.json();
       const finalText = preprocessText(data.text || '');
-      const finalPrefix = isFallback ? "> ⚠️ **系统提示：百度模型调用失败，已自动切换至硅基流动模型完成识别**\n\n" : "";
+
+      // 记录本次使用的模型信息
       setResultModels(prev => {
         const updated = [...prev];
         updated[index] = { channel: selectedModel.channel, name: selectedModel.name };
         return updated;
       });
-      typewriterEffect(finalPrefix + finalText, index, !isBatch);
+
+      // 直接输出识别结果，不添加任何前缀
+      typewriterEffect(finalText, index, !isBatch);
       markComplete(index);
+
     } catch (error) {
       console.error('识别失败:', error);
       const errMsg = `> ⚠️ **系统提示：图片处理失败**\n>\n> ${error.message}`;
