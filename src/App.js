@@ -271,11 +271,22 @@ function App() {
       let response;
       let lastError = null;
 
-      // 仅对百度渠道启用重试（最多3次，每次等10秒）
+      // 仅在百度渠道启用重试，并在每次重试时更新提示
       const maxRetries = selectedModel.channel === 'baidu' ? 3 : 1;
+      let response;
+      let lastError = null;
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
+          if (attempt > 1) {
+            // 非首次尝试：显示重试状态
+            setResults(prev => {
+              const updated = [...prev];
+              updated[index] = `> 🔄 **正在重试（${attempt}/${maxRetries}）...**`;
+              return updated;
+            });
+          }
+
           response = await fetch('/api/recognize', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
