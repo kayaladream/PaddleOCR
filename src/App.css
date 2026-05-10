@@ -1164,3 +1164,58 @@ main.has-content {
   .katex { font-size: 1em; }
   .latex-block { max-width: 100%; overflow-x: auto; }
 }
+
+/* 重试提示动画 */
+.retry-indicator {
+  padding: 1rem 1.5rem;
+  margin-bottom: 1rem;
+  background: rgba(255, 152, 0, 0.08);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  border-radius: 12px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.retry-message {
+  font-size: 0.95rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  /* 流动渐变色 */
+  background: linear-gradient(90deg, #ff9800, #ff6d00, #ff9800);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  /* 动画：渐入 + 背景流动 */
+  animation: fadeInSlide 0.5s ease-out, gradientShift 2s linear infinite;
+}
+
+@keyframes fadeInSlide {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+.retry-loading-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 152, 0, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.retry-loading-bar-fill {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #ff9800, #ff6d00, #ff9800);
+  background-size: 200% 100%;
+  animation: retryBar 1.5s ease-in-out infinite;
+}
+
+@keyframes retryBar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
