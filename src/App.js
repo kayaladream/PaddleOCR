@@ -276,9 +276,22 @@ function App() {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           if (attempt > 1) {
+            // 根据上一次失败的错误信息判断原因
+            let reason = '服务请求异常';
+            const msg = lastError?.message || '';
+            if (msg.includes('fetch') || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+              reason = '网络连接异常';
+            } else if (msg.includes('状态码') || msg.includes('status') || msg.includes('503') || msg.includes('502') || msg.includes('504')) {
+              reason = '模型服务暂时不可用';
+            } else if (msg.includes('超时') || msg.includes('timeout')) {
+              reason = '请求超时';
+            } else if (msg.includes('环境变量')) {
+              reason = '服务配置错误';
+            }
+
             setResults(prev => {
               const updated = [...prev];
-              updated[index] = `> 🔄 **正在重试（${attempt}/${maxRetries}）...**`;
+              updated[index] = `> ⚠️ **${reason}，将在 10 秒后自动重试（${attempt}/${maxRetries}）**\n>\n> 🔄 **正在重试中...**`;
               return updated;
             });
           }
