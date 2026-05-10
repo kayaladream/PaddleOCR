@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import 'katex/dist/katex.min.css';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -208,6 +209,9 @@ function App() {
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
 
+  // 重试状态：{ index, attempt, maxRetries, reason }
+  const [retryStatus, setRetryStatus] = useState(null);
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -289,10 +293,9 @@ function App() {
               reason = '服务配置错误';
             }
 
-            setResults(prev => {
-              const updated = [...prev];
-              updated[index] = `> ⚠️ **${reason}，将在 10 秒后自动重试（${attempt}/${maxRetries}）**\n>\n> 🔄 **正在重试中...**`;
-              return updated;
+            // 强制 React 同步渲染，让重试提示立刻出现
+            flushSync(() => {
+              setRetryStatus({ index, attempt, maxRetries, reason });
             });
           }
 
@@ -313,15 +316,23 @@ function App() {
             throw new Error(errorData.error || '服务异常');
           }
 
+          // 成功，清除重试状态
+          setRetryStatus(null);
           break;
         } catch (err) {
           lastError = err;
           if (attempt < maxRetries) {
+            // 等待 10 秒后重试
             await new Promise(resolve => setTimeout(resolve, 10000));
+          } else {
+            // 最后一次重试失败，额外停留 2 秒让用户看到提示
+            await new Promise(resolve => setTimeout(resolve, 2000));
           }
         }
       }
 
+      // 最终失败：清除重试状态，抛出错误
+      setRetryStatus(null);
       if (!response || !response.ok) {
         throw lastError || new Error('请求失败');
       }
@@ -687,6 +698,17 @@ function App() {
         {showResultsSection && (
           <div className="result-section">
             <div className="result-container">
+              {/* 重试提示动画 */}
+              {retryStatus && retryStatus.index === currentIndex && (
+                <div className="retry-indicator">
+                  <div className="retry-message">
+                    {retryStatus.reason}，将在 10 秒后自动重试（{retryStatus.attempt}/{retryStatus.maxRetries}）
+                  </div>
+                  <div className="retry-loading-bar">
+                    <div className="retry-loading-bar-fill" />
+                  </div>
+                </div>
+              )}
               {isLoading && !currentIsStreaming && results[currentIndex] == null && <div className="loading result-loading">等待识别...</div>}
               {currentIsStreaming && (
                 <div className="result-text">
