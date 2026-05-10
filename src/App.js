@@ -318,6 +318,8 @@ function App() {
           lastError = err;
           if (attempt < maxRetries) {
             await new Promise(resolve => setTimeout(resolve, 10000));
+          } else {
+            await new Promise(resolve => setTimeout(resolve, 2000));
           }
         }
       }
