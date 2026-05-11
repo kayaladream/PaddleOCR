@@ -89,11 +89,11 @@ export default async function handler(req, res) {
           presence_penalty: 0.3
         },
         'PaddlePaddle/PaddleOCR-VL-1.5': {
-          userText: '<image>\nFree OCR.',
+          userText: '',
           temperature: 0.0,
           top_p: 1.0,
-          frequency_penalty: 0.8,
-          presence_penalty: 0.5
+          frequency_penalty: 0.6,
+          presence_penalty: 0.3
         }
       };
 
