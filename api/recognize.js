@@ -93,11 +93,11 @@ export default async function handler(req, res) {
           presence_penalty: 0.1,
         },
         'deepseek-ai/DeepSeek-OCR': {
-          userText: '<image>\n<|grounding|>Detailedly convert this table and formula into LaTeX/Markdown.',
+          userText: '<image>\n<|grounding|>Convert the document to markdown.',
           temperature: 0.0,
           top_p: 1.0,
-          frequency_penalty: 0.6,
-          presence_penalty: 0.3,
+          frequency_penalty: 0.0,
+          presence_penalty: 0.0,
         },
       };
 
