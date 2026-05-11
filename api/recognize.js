@@ -86,7 +86,7 @@ export default async function handler(req, res) {
       // 对 PaddleOCR-VL 固定使用通用文本识别指令
       const MODEL_CONFIGS = {
         'PaddlePaddle/PaddleOCR-VL-1.5': {
-          userText: 'OCR:',
+          userText: 'Table Recognition:',
           temperature: 0.0,
           top_p: 1.0,
           frequency_penalty: 0.2,
