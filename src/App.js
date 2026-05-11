@@ -85,6 +85,8 @@ const preprocessText = (text) => {
     if (exponent in superscripts) return superscripts[exponent];
     return '^' + exponent;
   });
+  text = text.replace(/(\d)\*(?=\d)/g, '$1\\*');
+  text = text.replace(/(?<=\d)\*(\d)/g, '\\*$1');
   text = text.replace(/__TABLE_(\d+)__/g, (_, i) => `\n\n${tables[parseInt(i)]}\n\n`);
   return text.trim();
 };
