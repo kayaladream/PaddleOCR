@@ -89,8 +89,8 @@ export default async function handler(req, res) {
           userText: 'OCR:',
           temperature: 0.0,
           top_p: 1.0,
-          frequency_penalty: 0.12,
-          presence_penalty: 0.08,
+          frequency_penalty: 0.2,
+          presence_penalty: 0.1,
         },
         'deepseek-ai/DeepSeek-OCR': {
           userText: '<image>\n<|grounding|>Convert the document to markdown.',
