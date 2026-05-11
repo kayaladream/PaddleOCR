@@ -82,7 +82,7 @@ export default async function handler(req, res) {
       const MODEL_CONFIGS = {
         'deepseek-ai/DeepSeek-OCR': {
           // 关键：必须使用 Free OCR. 模式，避免输出坐标 token
-          userText: '<image>\nFree OCR.',
+          userText: 'Parse the figure',
           temperature: 0.0,
           top_p: 1.0,
           frequency_penalty: 0.6,
