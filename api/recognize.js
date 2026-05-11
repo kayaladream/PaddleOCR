@@ -86,11 +86,11 @@ export default async function handler(req, res) {
       // 对 PaddleOCR-VL 固定使用通用文本识别指令
       const MODEL_CONFIGS = {
         'PaddlePaddle/PaddleOCR-VL-1.5': {
-          userText: 'OCR: Table Recognition: Formula Recognition: Chart Recognition:',
+          userText: 'OCR:',
           temperature: 0.0,
           top_p: 1.0,
-          frequency_penalty: 0.6,
-          presence_penalty: 0.3,
+          frequency_penalty: 0.0,
+          presence_penalty: 0.0,
         },
         'deepseek-ai/DeepSeek-OCR': {
           userText: '<image>\n<|grounding|>Detailedly convert this table and formula into LaTeX/Markdown.',
