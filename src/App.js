@@ -52,6 +52,9 @@ const MODELS = [
 // ====== 预处理：清理 Markdown ======
 const preprocessText = (text) => {
   if (!text) return '';
+  text = text.replace(/[a-zA-Z_]*<\|\/?ref\|>\[\[.*?\]\]<\|\/?det\|>/g, '');
+  text = text.replace(/<\|\/?(ref|det|grounding)\|>/g, '');
+  text = text.replace(/\[\[\d+,\s*\d+,\s*\d+,\s*\d+\]\]/g, '');
   const tables = [];
   text = text.replace(/\|[^\n]+\|\n\|[-|\s]+\|(?:\n\|[^\n]+\|)+/g, (match) => {
     tables.push(match);
