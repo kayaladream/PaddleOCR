@@ -376,7 +376,7 @@ function App() {
               channel: selectedModel.channel,
               apiName: selectedModel.apiName
             }),
-          }, 120000); // 120秒超时
+          }, 90000); // 90秒超时
 
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: '请求失败' }));
