@@ -53,7 +53,7 @@ async function autoDetectPrompt(imageData, mimeType, token) {
       }),
     });
 
-    if (!response.ok) return 'OCR:';
+    if (!response.ok) return 'ERROR:';
 
     const data = await response.json();
     const reply = data?.choices?.[0]?.message?.content?.trim().toUpperCase() || 'A';
