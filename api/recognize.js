@@ -102,7 +102,7 @@ export default async function handler(req, res) {
     if (classifyOnly && channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
       const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
       if (dynamicPrompt === 'ERROR:') {
-        routerLabel = '路由分类请求出错';
+        routerLabel = '路由分类服务异常，使用默认OCR';
       } else if (dynamicPrompt?.includes('Table')) {
         routerLabel = '表格';
       } else if (dynamicPrompt?.includes('Formula')) {
