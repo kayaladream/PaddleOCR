@@ -161,6 +161,7 @@ export default async function handler(req, res) {
       const data = await response.json();
 
       if (modelId === 'baidu-ocrv5') {
+        // 修复：安全提取字符串，避免 [object Object]
         recognizedText = data?.result?.ocrResults
           ?.map(res => typeof res.prunedResult === 'string' ? res.prunedResult : res.prunedResult?.text || '')
           .filter(Boolean)
@@ -173,7 +174,7 @@ export default async function handler(req, res) {
     // ============================================
     // 渠道二：硅基流动 (SiliconFlow)
     // ============================================
-    } else if (channel === 'silicon') {
+    else if (channel === 'silicon') {
       const url = 'https://api.siliconflow.cn/v1/chat/completions';
       let config = {};
 
