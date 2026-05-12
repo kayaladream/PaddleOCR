@@ -162,7 +162,10 @@ export default async function handler(req, res) {
       const data = await response.json();
 
       if (modelId === 'baidu-ocrv5') {
-        recognizedText = data?.result?.ocrResults?.map(res => res.prunedResult).join('\n\n') || '';
+        recognizedText = data?.result?.ocrResults
+          ?.map(res => typeof res.prunedResult === 'string' ? res.prunedResult : res.prunedResult?.text || '')
+          .filter(Boolean)
+          .join('\n\n') || '';
       } else {
         recognizedText = data?.result?.layoutParsingResults?.[0]?.markdown?.text || '';
       }
