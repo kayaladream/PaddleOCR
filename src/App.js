@@ -282,13 +282,12 @@ function App() {
     if (!file.type.startsWith('image/')) return;
     try {
       setStreamingStatus(prev => ({ ...prev, [index]: true }));
-      // 开始识别前先将对应位置清空，避免显示旧结果
       setResults(prev => {
         const newResults = [...prev];
         newResults[index] = '';
         return newResults;
       });
-      // 清空路由标签
+      // 清空旧的路由标签
       setRouterResults(prev => {
         const u = [...prev];
         u[index] = null;
@@ -297,15 +296,42 @@ function App() {
 
       const imageData = await fileToBase64(file);
 
+      // ===== 新增：提前发起分类请求，尽早显示路由标签 =====
+      if (selectedModel.channel === 'silicon' && selectedModel.apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
+        // 异步发送分类请求（不阻塞识别请求的发送）
+        fetch('/api/recognize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageData,
+            mimeType: file.type,
+            channel: 'silicon',
+            apiName: 'PaddlePaddle/PaddleOCR-VL-1.5',
+            classifyOnly: true,   // 仅分类
+          }),
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.routerResult) {
+              setRouterResults(prev => {
+                const u = [...prev];
+                u[index] = data.routerResult;
+                return u;
+              });
+            }
+          })
+          .catch(err => console.error('提前分类请求失败:', err));
+        // 不等待分类结果，立即继续后面的识别流程
+      }
+
+      // 原有的重试逻辑和识别请求
       let response;
       let lastError = null;
-
       const maxRetries = selectedModel.channel === 'baidu' ? 3 : 1;
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           if (attempt > 1) {
-            // 根据上一次失败的错误信息判断原因
             let reason = '服务请求异常';
             const msg = lastError?.message || '';
             if (msg.includes('fetch') || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
@@ -317,7 +343,6 @@ function App() {
             } else if (msg.includes('环境变量')) {
               reason = '服务配置错误';
             }
-
             setResults(prev => {
               const updated = [...prev];
               updated[index] = `> ⚠️ **${reason}，将在 10 秒后自动重试（${attempt}/${maxRetries}）**\n>\n> 🔄 **正在重试中...**`;
@@ -341,7 +366,6 @@ function App() {
             const errorData = await response.json().catch(() => ({ error: '请求失败' }));
             throw new Error(errorData.error || '服务异常');
           }
-
           break;
         } catch (err) {
           lastError = err;
@@ -360,14 +384,14 @@ function App() {
       const data = await response.json();
       const finalText = preprocessText(data.text || '');
 
-      // 记录本次使用的模型信息
+      // 记录模型信息
       setResultModels(prev => {
         const updated = [...prev];
         updated[index] = { channel: selectedModel.channel, name: selectedModel.name };
         return updated;
       });
 
-      // 新增：保存路由检测结果
+      // 如果识别响应中也带了 routerResult（可能稍后到达），也更新一下（防止提前分类失败的情况）
       if (data.routerResult) {
         setRouterResults(prev => {
           const u = [...prev];
@@ -376,7 +400,6 @@ function App() {
         });
       }
 
-      // 直接输出识别结果，不添加任何前缀
       typewriterEffect(finalText, index, !isBatch);
       markComplete(index);
 
