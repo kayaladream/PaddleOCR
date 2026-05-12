@@ -761,6 +761,13 @@ main.has-content {
     padding: 2px 8px;
     font-size: 0.65rem;
   }
+
+  .router-info-badge {
+    top: 32px;
+    right: 8px;
+    padding: 2px 6px;
+    font-size: 0.65rem;
+  }
 }
 
 /* 编辑内容可编辑区域样式 */
@@ -1164,3 +1171,19 @@ main.has-content {
   .katex { font-size: 1em; }
   .latex-block { max-width: 100%; overflow-x: auto; }
 }
+
+.router-info-badge {
+  position: absolute;
+  top: 42px;            /* 位于状态角标下方 */
+  right: 12px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #2A4CF0;
+  background: rgba(23, 50, 224, 0.08);
+  border-radius: 20px;
+  white-space: nowrap;
+  z-index: 5;
+  pointer-events: none;
+}
+
