@@ -284,7 +284,7 @@ function App() {
 
       const imageData = await fileToBase64(file);
 
-      // ===== 提前分类请求（仅 PaddleOCR-VL-1.5）—— 静默重试3次 =====
+      // ===== 提前分类请求（仅 PaddleOCR-VL-1.5）—— 静默重试3次，失败时显示错误标签 =====
       if (selectedModel.channel === 'silicon' && selectedModel.apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
         const classifyWithRetry = async () => {
           for (let attempt = 1; attempt <= 3; attempt++) {
@@ -311,14 +311,20 @@ function App() {
                 }
                 return; // 成功，停止重试
               }
+              // 如果后端返回非 2xx，继续重试
             } catch (err) {
-              console.error(`分类请求重试 ${attempt}/3 失败`, err);
+              console.error(`分类请求重试 ${attempt}/3 网络/其他错误`, err.message);
             }
             if (attempt < 3) {
-              await new Promise(r => setTimeout(r, 500)); // 重试前等待500ms
+              await new Promise(r => setTimeout(r, 500));
             }
           }
-          // 3次全失败，不显示任何内容（routerResults 保持 null）
+          // 3次全部失败，显示错误标签
+          setRouterResults(prev => {
+            const u = [...prev];
+            u[index] = '路由分类请求出错';
+            return u;
+          });
         };
         classifyWithRetry(); // 不 await，与识别请求并发
       }
@@ -326,7 +332,7 @@ function App() {
       // ===== 正式识别请求（所有模型统一重试3次） =====
       let response;
       let lastError = null;
-      const maxRetries = 3; // 全部渠道统一重试3次
+      const maxRetries = 3;
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
@@ -391,6 +397,7 @@ function App() {
         return updated;
       });
 
+      // 如果识别响应也带有路由标签（例如提前分类请求失败但识别请求包含了结果），则更新
       if (data.routerResult) {
         setRouterResults(prev => {
           const u = [...prev];
@@ -743,7 +750,6 @@ function App() {
                     {currentStatus.text}
                   </div>
                 )}
-                {/* 新增：路由检测结果标签 */}
                 {routerResults[currentIndex] && (
                   <div className="router-info-badge">路由器检测为：{routerResults[currentIndex]}</div>
                 )}
