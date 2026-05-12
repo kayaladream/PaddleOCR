@@ -55,6 +55,7 @@ async function autoDetectPrompt(imageData, mimeType, token) {
     if (!response.ok) return 'ERROR:';
 
     const data = await response.json();
+    console.log('百度 PP-OCRv5 原始返回:', JSON.stringify(data?.result?.ocrResults?.[0]));
     const reply = data?.choices?.[0]?.message?.content?.trim().toUpperCase() || 'A';
 
     if (reply.includes('B')) {
