@@ -402,6 +402,12 @@ function App() {
       if (data.routerResult) {
         setRouterResults(prev => {
           const u = [...prev];
+          const current = u[index];
+          const normalTypes = ['表格', '公式', '纯文本'];
+          // 如果当前已经是正常类别，且新值不是正常类别，则不覆盖，保留正确结果
+          if (current && normalTypes.includes(current) && !normalTypes.includes(data.routerResult)) {
+            return u;
+          }
           u[index] = data.routerResult;
           return u;
         });
