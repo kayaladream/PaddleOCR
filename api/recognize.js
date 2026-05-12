@@ -116,6 +116,7 @@ export default async function handler(req, res) {
     }
 
     let recognizedText = '';
+    let routerLabel = null; // 新增：前端展示的路由标签
 
     // ============================================
     // 渠道一：Aistudio Baidu（保持原样）
@@ -183,7 +184,6 @@ export default async function handler(req, res) {
 
       // 获取动态或者静态的配置
       let config = {};
-      let routerLabel = null; // 新增：前端展示的路由标签
 
       if (apiName === 'deepseek-ai/DeepSeek-OCR') {
         // DeepSeek 足够强大，一条指令走天下
