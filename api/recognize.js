@@ -159,13 +159,10 @@ export default async function handler(req, res) {
       }
 
       const data = await response.json();
-      console.log('PP-OCRv5 原始数据:', JSON.stringify(data));
+
       if (modelId === 'baidu-ocrv5') {
-        // 修复：安全提取字符串，避免 [object Object]
-        recognizedText = data?.result?.ocrResults
-          ?.map(res => typeof res.prunedResult === 'string' ? res.prunedResult : res.prunedResult?.text || '')
-          .filter(Boolean)
-          .join('\n\n') || '';
+        // 临时调试：直接将百度返回的完整 JSON 显示在页面上
+        return res.json({ text: JSON.stringify(data, null, 2) });
       } else {
         recognizedText = data?.result?.layoutParsingResults?.[0]?.markdown?.text || '';
       }
