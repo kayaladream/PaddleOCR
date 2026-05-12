@@ -55,7 +55,6 @@ async function autoDetectPrompt(imageData, mimeType, token) {
     if (!response.ok) return 'ERROR:';
 
     const data = await response.json();
-    console.log('百度 PP-OCRv5 原始返回:', JSON.stringify(data?.result?.ocrResults?.[0]));
     const reply = data?.choices?.[0]?.message?.content?.trim().toUpperCase() || 'A';
 
     if (reply.includes('B')) {
@@ -160,7 +159,7 @@ export default async function handler(req, res) {
       }
 
       const data = await response.json();
-
+      console.log('百度 PP-OCRv5 原始返回:', JSON.stringify(data?.result?.ocrResults?.[0]));
       if (modelId === 'baidu-ocrv5') {
         // 修复：安全提取字符串，避免 [object Object]
         recognizedText = data?.result?.ocrResults
