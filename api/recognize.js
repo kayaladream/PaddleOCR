@@ -40,7 +40,7 @@ async function autoDetectPrompt(imageData, mimeType, token) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: '',
+        model: 'Qwen/Qwen3-VL-32B-Instruct',
         messages: [{
           role: 'user',
           content: [
