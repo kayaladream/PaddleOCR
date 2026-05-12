@@ -16,6 +16,7 @@
     "remark-gfm": "^3.0.1",
     "remark-math": "^5.1.1",
     "rehype-katex": "^6.0.3",
+    "rehype-raw": "^7.0.0"
     "dompurify": "^3.0.5",
     "marked": "^9.0.0",
     "turndown": "^7.1.2",
