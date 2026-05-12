@@ -92,7 +92,7 @@ async function autoDetectPrompt(imageData, mimeType, token) {
     return 'OCR:';
   } catch (error) {
     console.error('路由分类请求出错:', error);
-    return 'OCR:'; // 出错则默认使用纯文本解析
+    return 'ERROR:'; // 修改：返回特殊标记，便于生成错误标签
   }
 }
 
@@ -118,10 +118,61 @@ export default async function handler(req, res) {
     let recognizedText = '';
 
     // ============================================
-    // 渠道一：Aistudio Baidu (保持不变)
+    // 渠道一：Aistudio Baidu（保持原样）
     // ============================================
     if (channel === 'baidu') {
-        // ... (此处保留你原有的百度渠道代码不变) ...
+      let host;
+      if (modelId === 'baidu-vl-1.5') {
+        host = process.env.PADDLE_OCR_HOST_VL;
+      } else if (modelId === 'baidu-ocrv5') {
+        host = process.env.PADDLE_OCR_HOST_OCR;
+      } else if (modelId === 'baidu-structurev3') {
+        host = process.env.PADDLE_OCR_HOST_STRUCTURE;
+      } else {
+        host = process.env.PADDLE_OCR_HOST_VL;
+      }
+
+      if (!host) {
+        throw new Error(`环境变量未设置：请配置 ${modelId === 'baidu-ocrv5' ? 'PADDLE_OCR_HOST_OCR' : modelId === 'baidu-structurev3' ? 'PADDLE_OCR_HOST_STRUCTURE' : 'PADDLE_OCR_HOST_VL'} 以及 PADDLE_TOKEN`);
+      }
+
+      let url = '';
+      let payload = { file: imageData, fileType: 1 };
+
+      if (modelId === 'baidu-vl-1.5') {
+        url = `${host}/layout-parsing`;
+        payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
+      } else if (modelId === 'baidu-ocrv5') {
+        url = `${host}/ocr`;
+        payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useTextlineOrientation: false };
+      } else if (modelId === 'baidu-structurev3') {
+        url = `${host}/layout-parsing`;
+        payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useTextlineOrientation: false, useChartRecognition: false };
+      } else {
+        url = `${host}/layout-parsing`;
+        payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `token ${process.env.PADDLE_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`百度 PaddleOCR 返回状态码 ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (modelId === 'baidu-ocrv5') {
+        recognizedText = data?.result?.ocrResults?.map(res => res.prunedResult).join('\n\n') || '';
+      } else {
+        recognizedText = data?.result?.layoutParsingResults?.[0]?.markdown?.text || '';
+      }
     }
 
     // ============================================
@@ -132,6 +183,7 @@ export default async function handler(req, res) {
 
       // 获取动态或者静态的配置
       let config = {};
+      let routerLabel = null; // 新增：前端展示的路由标签
 
       if (apiName === 'deepseek-ai/DeepSeek-OCR') {
         // DeepSeek 足够强大，一条指令走天下
@@ -146,6 +198,17 @@ export default async function handler(req, res) {
         // 🚀 【核心新增】使用路由函数，动态获取当前图片的最佳指令
         const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
         
+        // 生成供前端展示的路由标签
+        if (dynamicPrompt === 'ERROR:') {
+          routerLabel = '路由分类请求出错';
+        } else if (dynamicPrompt?.includes('Table')) {
+          routerLabel = '表格';
+        } else if (dynamicPrompt?.includes('Formula')) {
+          routerLabel = '公式';
+        } else if (dynamicPrompt?.includes('OCR:')) {
+          routerLabel = '纯文本';
+        }
+
         config = {
           userText: dynamicPrompt, // 此时它可能是 OCR: 或 Table Recognition: 或 Formula Recognition:
           temperature: 0.0,
@@ -223,7 +286,12 @@ export default async function handler(req, res) {
       return res.json({ text: '> ⚠️ **系统提示：当前图片未检测到任何可识别的文本，或遇到异常无法解析。**' });
     }
 
-    res.json({ text: recognizedText });
+    // 修改：仅当 PaddleOCR 时附带路由检测结果
+    const responsePayload = { text: recognizedText };
+    if (channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.5' && routerLabel) {
+      responsePayload.routerResult = routerLabel;
+    }
+    res.json(responsePayload);
 
   } catch (error) {
     console.error('识别失败:', error.message);
