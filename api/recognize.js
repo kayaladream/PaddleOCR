@@ -159,7 +159,7 @@ export default async function handler(req, res) {
       }
 
       const data = await response.json();
-      console.log('百度 PP-OCRv5 原始返回:', JSON.stringify(data?.result?.ocrResults?.[0]));
+      console.log('PP-OCRv5 原始数据:', JSON.stringify(data));
       if (modelId === 'baidu-ocrv5') {
         // 修复：安全提取字符串，避免 [object Object]
         recognizedText = data?.result?.ocrResults
