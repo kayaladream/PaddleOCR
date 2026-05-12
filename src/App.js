@@ -3,6 +3,7 @@ import 'katex/dist/katex.min.css';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
 import { marked } from 'marked';
 import TurndownService from 'turndown';
 import DOMPurify from 'dompurify';
@@ -351,7 +352,7 @@ function App() {
 
             setResults(prev => {
               const updated = [...prev];
-              updated[index] = `> ⚠️ **${reason}，将在 10 秒后自动重试（${attempt}/${maxRetries}）**\n>\n> 🔄 **正在重试中...**`;
+              updated[index] = `>  **${reason}，将在 10 秒后自动重试（${attempt}/${maxRetries}）**\n>\n> <span class="breathe-ring"></span> **正在重试中...**`;
               return updated;
             });
           }
@@ -767,7 +768,7 @@ function App() {
                   <div className="gradient-text">
                     <ReactMarkdown
                       remarkPlugins={[remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
+                      rehypePlugins={[rehypeKatex, rehypeRaw]}
                       components={{
                         table: ({node, ...props}) => (<div style={{overflowX:'auto', maxWidth:'100%'}}><table className="markdown-table" {...props} /></div>),
                         th: ({node, ...props}) => <th className="markdown-th" {...props} />,
