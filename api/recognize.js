@@ -1,4 +1,52 @@
 // api/recognize.js
+// 将 PaddleOCR 的 OTSL 格式翻译为标准 HTML 表格
+function parseOtslToHtml(text) {
+  // 如果没有表格特征符号，直接返回原文本
+  if (!text.includes('<nl>') && !text.includes('<fcel>')) {
+    return text;
+  }
+
+  try {
+    let html = '<table class="markdown-table" style="border-collapse: collapse;" border="1"><tbody>\n';
+    
+    // 1. 按行切分
+    const rows = text.split('<nl>').filter(r => r.trim() !== '');
+
+    rows.forEach(row => {
+      html += '  <tr>\n';
+      // 2. 按照新单元格(<fcel>)或占位符(<ucel>)切割列
+      const cells = row.split(/(?=<fcel>|<ucel>)/).filter(c => c.trim() !== '');
+
+      cells.forEach(cell => {
+        // 计算跨列 (lcel) 和跨行 (ucel)
+        const colspan = 1 + (cell.match(/<lcel>/g) ||[]).length;
+        const rowspan = 1 + (cell.match(/<ucel>/g) ||[]).length;
+        
+        // 提取真正的文字内容
+        const cellText = cell.replace(/<fcel>|<lcel>|<ucel>|<ecel>/g, '').trim();
+
+        // 核心逻辑：如果它是被上方合并的虚无占位符，在 HTML 中不需要渲染 td，直接跳过
+        if (cellText === '' && !cell.includes('<fcel>')) {
+          return;
+        }
+
+        // 拼接带有合并属性的标准 HTML 标签
+        let attrs =[];
+        if (colspan > 1) attrs.push(`colspan="${colspan}"`);
+        if (rowspan > 1) attrs.push(`rowspan="${rowspan}"`);
+        
+        html += `    <td ${attrs.join(' ')}>${cellText}</td>\n`;
+      });
+      html += '  </tr>\n';
+    });
+
+    html += '</tbody></table>\n\n';
+    return html;
+  } catch (err) {
+    console.error("OTSL 解析为 HTML 失败:", err);
+    return text; // 如果解析失败，安全回退到原文本
+  }
+}
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: '仅支持POST请求' });
@@ -152,7 +200,10 @@ export default async function handler(req, res) {
       let rawText = data?.choices?.[0]?.message?.content || '';
 
       if (rawText) {
-        // 统一的清洗逻辑（不会破坏表格，因为此时输出就是纯文本）
+        // 🚀 【新增】：先用翻译器把表格标签转成 HTML
+        rawText = parseOtslToHtml(rawText);
+
+        // 统一的清洗逻辑（保留原样不变）
         rawText = rawText.replace(/^.*<\|ref\|>.*<\/\|ref\|>.*$/gm, '');
         rawText = rawText.replace(/^.*<\|det\|>.*<\/\|det\|>.*$/gm, '');
         rawText = rawText.replace(/<\|?LOC[^>]*\|?>/g, '');
