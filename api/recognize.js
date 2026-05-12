@@ -57,7 +57,7 @@ async function autoDetectPrompt(imageData, mimeType, token) {
       },
       body: JSON.stringify({
         // 推荐使用阿里 Qwen 视觉小模型作为“分类器”，速度极快，且通常在硅基流动是免费的
-        model: 'Qwen/Qwen2.5-VL-72B-Instruct', 
+        model: 'Qwen/Qwen3-VL-32B-Instruct', 
         messages:[{
           role: 'user',
           content:[
