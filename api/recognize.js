@@ -1,5 +1,4 @@
 // api/recognize.js
-// 将 PaddleOCR 的 OTSL 格式翻译为标准 HTML 表格
 function parseOtslToHtml(text) {
   if (!text.includes('<nl>') && !text.includes('<fcel>')) {
     return text;
@@ -86,7 +85,7 @@ export default async function handler(req, res) {
       modelId = 'baidu-vl-1.5',
       channel = 'baidu',
       apiName,
-      classifyOnly = false        // 新增：只分类不识别
+      classifyOnly = false
     } = req.body;
 
     if (!imageData || !mimeType) {
@@ -94,11 +93,8 @@ export default async function handler(req, res) {
     }
 
     let recognizedText = '';
-    let routerLabel = null;       // 提前声明，避免 ReferenceError
+    let routerLabel = null;
 
-    // ============================================
-    // 新增：仅分类模式
-    // ============================================
     if (classifyOnly && channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
       const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
       if (dynamicPrompt === 'ERROR:') {
@@ -113,11 +109,68 @@ export default async function handler(req, res) {
       return res.json({ routerResult: routerLabel });
     }
 
+    if (channel === 'baidu') {
     // ============================================
-    // 正常识别流程
+    // 渠道一：Aistudio Baidu
     // ============================================
     if (channel === 'baidu') {
-      // ... (保留原有百度渠道代码)
+      let host;
+      if (modelId === 'baidu-vl-1.5') {
+        host = process.env.PADDLE_OCR_HOST_VL;
+      } else if (modelId === 'baidu-ocrv5') {
+        host = process.env.PADDLE_OCR_HOST_OCR;
+      } else if (modelId === 'baidu-structurev3') {
+        host = process.env.PADDLE_OCR_HOST_STRUCTURE;
+      } else {
+        host = process.env.PADDLE_OCR_HOST_VL;
+      }
+
+      if (!host) {
+        throw new Error(`环境变量未设置：请配置 ${modelId === 'baidu-ocrv5' ? 'PADDLE_OCR_HOST_OCR' : modelId === 'baidu-structurev3' ? 'PADDLE_OCR_HOST_STRUCTURE' : 'PADDLE_OCR_HOST_VL'} 以及 PADDLE_TOKEN`);
+      }
+
+      let url = '';
+      let payload = { file: imageData, fileType: 1 };
+
+      if (modelId === 'baidu-vl-1.5') {
+        url = `${host}/layout-parsing`;
+        payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
+      } else if (modelId === 'baidu-ocrv5') {
+        url = `${host}/ocr`;
+        payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useTextlineOrientation: false };
+      } else if (modelId === 'baidu-structurev3') {
+        url = `${host}/layout-parsing`;
+        payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useTextlineOrientation: false, useChartRecognition: false };
+      } else {
+        url = `${host}/layout-parsing`;
+        payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `token ${process.env.PADDLE_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`百度 PaddleOCR 返回状态码 ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (modelId === 'baidu-ocrv5') {
+        recognizedText = data?.result?.ocrResults?.map(res => res.prunedResult).join('\n\n') || '';
+      } else {
+        recognizedText = data?.result?.layoutParsingResults?.[0]?.markdown?.text || '';
+      }
+    }
+
+    // ============================================
+    // 渠道二：硅基流动 (SiliconFlow)
+    // ============================================
     } else if (channel === 'silicon') {
       const url = 'https://api.siliconflow.cn/v1/chat/completions';
       let config = {};
@@ -148,7 +201,7 @@ export default async function handler(req, res) {
             const promptForOCR = (dynamicPrompt === 'ERROR:') ? 'OCR:' : dynamicPrompt;
 
             config = {
-                userText: promptForOCR,   // ✅ 始终是有效的 OCR 指令
+                userText: promptForOCR,
                 temperature: 0.0,
                 top_p: 1.0,
                 frequency_penalty: 0.08,
