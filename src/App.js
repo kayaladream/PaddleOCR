@@ -323,7 +323,7 @@ function App() {
           // 3次全部失败，显示错误标签
           setRouterResults(prev => {
             const u = [...prev];
-            u[index] = '路由分类请求出错';
+            u[index] = '路由分类服务异常，使用默认OCR';
             return u;
           });
         };
@@ -752,7 +752,10 @@ function App() {
                   </div>
                 )}
                 {routerResults[currentIndex] && (
-                  <div className="router-info-badge">路由器检测为：{routerResults[currentIndex]}</div>
+                  <div className="router-info-badge">
+                    {['表格', '公式', '纯文本'].includes(routerResults[currentIndex]) ? '路由器检测为：' : ''}
+                    {routerResults[currentIndex]}
+                  </div>
                 )}
               </div>
             </div>
