@@ -95,6 +95,7 @@ export default async function handler(req, res) {
     let recognizedText = '';
     let routerLabel = null;
 
+    // 仅分类模式
     if (classifyOnly && channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
       const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
       if (dynamicPrompt === 'ERROR:') {
@@ -161,8 +162,11 @@ export default async function handler(req, res) {
       const data = await response.json();
 
       if (modelId === 'baidu-ocrv5') {
-        // 临时调试：直接将百度返回的完整 JSON 显示在页面上
-        return res.json({ text: JSON.stringify(data, null, 2) });
+        // 修正：提取 rec_texts 数组并拼接
+        recognizedText = data?.result?.ocrResults
+          ?.flatMap(res => res.prunedResult?.rec_texts || [])
+          .filter(Boolean)
+          .join('\n') || '';
       } else {
         recognizedText = data?.result?.layoutParsingResults?.[0]?.markdown?.text || '';
       }
@@ -184,30 +188,28 @@ export default async function handler(req, res) {
           presence_penalty: 0.0,
         };
       } else if (apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
-            const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
+        const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
 
-            // 生成路由标签
-            if (dynamicPrompt === 'ERROR:') {
-                routerLabel = '路由分类服务异常，使用默认OCR';
-            } else if (dynamicPrompt?.includes('Table')) {
-                routerLabel = '表格';
-            } else if (dynamicPrompt?.includes('Formula')) {
-                routerLabel = '公式';
-            } else if (dynamicPrompt?.includes('OCR:')) {
-                routerLabel = '纯文本';
-            }
+        if (dynamicPrompt === 'ERROR:') {
+          routerLabel = '路由分类服务异常，使用默认OCR';
+        } else if (dynamicPrompt?.includes('Table')) {
+          routerLabel = '表格';
+        } else if (dynamicPrompt?.includes('Formula')) {
+          routerLabel = '公式';
+        } else if (dynamicPrompt?.includes('OCR:')) {
+          routerLabel = '纯文本';
+        }
 
-            // 当分类失败时，回退为默认 OCR 指令
-            const promptForOCR = (dynamicPrompt === 'ERROR:') ? 'OCR:' : dynamicPrompt;
+        const promptForOCR = (dynamicPrompt === 'ERROR:') ? 'OCR:' : dynamicPrompt;
 
-            config = {
-                userText: promptForOCR,
-                temperature: 0.0,
-                top_p: 1.0,
-                frequency_penalty: 0.08,
-                presence_penalty: 0.05,
-            };
-        } else {
+        config = {
+          userText: promptForOCR,
+          temperature: 0.0,
+          top_p: 1.0,
+          frequency_penalty: 0.08,
+          presence_penalty: 0.05,
+        };
+      } else {
         config = {
           userText: '<image>\nFree OCR.',
           temperature: 0.0,
