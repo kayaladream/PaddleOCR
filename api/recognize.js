@@ -131,26 +131,30 @@ export default async function handler(req, res) {
           presence_penalty: 0.0,
         };
       } else if (apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
-        const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
-        // 生成路由标签
-        if (dynamicPrompt === 'ERROR:') {
-          routerLabel = '路由分类请求出错';
-        } else if (dynamicPrompt?.includes('Table')) {
-          routerLabel = '表格';
-        } else if (dynamicPrompt?.includes('Formula')) {
-          routerLabel = '公式';
-        } else if (dynamicPrompt?.includes('OCR:')) {
-          routerLabel = '纯文本';
-        }
+            const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
 
-        config = {
-          userText: dynamicPrompt,
-          temperature: 0.0,
-          top_p: 1.0,
-          frequency_penalty: 0.08,
-          presence_penalty: 0.05,
-        };
-      } else {
+            // 生成路由标签
+            if (dynamicPrompt === 'ERROR:') {
+                routerLabel = '路由器异常，已降级';
+            } else if (dynamicPrompt?.includes('Table')) {
+                routerLabel = '表格';
+            } else if (dynamicPrompt?.includes('Formula')) {
+                routerLabel = '公式';
+            } else if (dynamicPrompt?.includes('OCR:')) {
+                routerLabel = '纯文本';
+            }
+
+            // 当分类失败时，回退为默认 OCR 指令
+            const promptForOCR = (dynamicPrompt === 'ERROR:') ? 'OCR:' : dynamicPrompt;
+
+            config = {
+                userText: promptForOCR,   // ✅ 始终是有效的 OCR 指令
+                temperature: 0.0,
+                top_p: 1.0,
+                frequency_penalty: 0.08,
+                presence_penalty: 0.05,
+            };
+        } else {
         config = {
           userText: '<image>\nFree OCR.',
           temperature: 0.0,
