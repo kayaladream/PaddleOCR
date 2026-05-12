@@ -365,7 +365,10 @@ function App() {
               return updated;
             });
           }
-
+          let timeoutMs = 90000; // 硅基流动默认 90 秒
+          if (selectedModel.channel === 'baidu') {
+              timeoutMs = 120000; // 百度官方 120 秒
+          }
           response = await fetchWithTimeout('/api/recognize', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -376,7 +379,7 @@ function App() {
               channel: selectedModel.channel,
               apiName: selectedModel.apiName
             }),
-          }, 90000); // 90秒超时
+          }, timeoutMs);
 
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: '请求失败' }));
