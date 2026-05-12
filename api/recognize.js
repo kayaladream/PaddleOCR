@@ -1,31 +1,34 @@
 // api/recognize.js
-// 将 PaddleOCR 的 OTSL 格式翻译为标准 HTML 表格
+// 将 PaddleOCR 的 OTSL 格式翻译为标准 HTML 表格，并具备“抗幻觉”能力
 function parseOtslToHtml(text) {
-  // 如果没有表格特征符号，直接返回原文本
-  if (!text.includes('<nl>') && !text.includes('<fcel>')) {
-    return text;
+  // 1. 【核心抗发疯补丁】：利用正则折叠无意义的死循环复读
+  // 匹配任何长度在 1 到 50 个字符之间的片段，如果连续重复出现 3 次以上，则强制折叠为 1 次
+  // 例如把 "公司公司公司公司" 变回 "公司"，"告 告 告" 变回 "告 "
+  let cleanedText = text.replace(/(.{1,50}?)\1{3,}/g, '$1');
+
+  if (!cleanedText.includes('<nl>') && !cleanedText.includes('<fcel>')) {
+    return cleanedText;
   }
 
   try {
     let html = '<table class="markdown-table" style="border-collapse: collapse;" border="1"><tbody>\n';
     
-    // 1. 按行切分
-    const rows = text.split('<nl>').filter(r => r.trim() !== '');
+    // 按行切分
+    const rows = cleanedText.split('<nl>').filter(r => r.trim() !== '');
 
     rows.forEach(row => {
       html += '  <tr>\n';
-      // 2. 按照新单元格(<fcel>)或占位符(<ucel>)切割列
-      const cells = row.split(/(?=<fcel>|<ucel>)/).filter(c => c.trim() !== '');
+      // 按照新单元格(<fcel>)或占位符(<ucel>、<xcel>)切割列
+      const cells = row.split(/(?=<fcel>|<ucel>|<xcel>)/).filter(c => c.trim() !== '');
 
       cells.forEach(cell => {
-        // 计算跨列 (lcel) 和跨行 (ucel)
         const colspan = 1 + (cell.match(/<lcel>/g) ||[]).length;
         const rowspan = 1 + (cell.match(/<ucel>/g) ||[]).length;
         
-        // 提取真正的文字内容
-        const cellText = cell.replace(/<fcel>|<lcel>|<ucel>|<ecel>/g, '').trim();
+        // 提取真正的文字内容，同时清除所有的指令符号（新增 <xcel> 清除）
+        const cellText = cell.replace(/<fcel>|<lcel>|<ucel>|<ecel>|<xcel>/g, '').trim();
 
-        // 核心逻辑：如果它是被上方合并的虚无占位符，在 HTML 中不需要渲染 td，直接跳过
+        // 占位符跳过渲染
         if (cellText === '' && !cell.includes('<fcel>')) {
           return;
         }
