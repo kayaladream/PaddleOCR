@@ -36,7 +36,7 @@ const MODELS = [
     id: 'sili-vl-1.5',
     name: 'PaddleOCR-VL-1.5',
     badge: 'silicon.png',
-    desc: '硅基流动加速版，识别能力较百度官方弱，轻量备用',
+    desc: '硅基流动版，识别能力较百度官方弱，轻量备用',
     channel: 'silicon',
     apiName: 'PaddlePaddle/PaddleOCR-VL-1.5'
   },
