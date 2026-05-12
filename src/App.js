@@ -207,6 +207,7 @@ function App() {
   const [images, setImages] = useState([]);
   const [results, setResults] = useState([]);
   const [resultModels, setResultModels] = useState([]);
+  const [routerResults, setRouterResults] = useState([]); // 新增：路由检测结果
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -287,6 +288,12 @@ function App() {
         newResults[index] = '';
         return newResults;
       });
+      // 清空路由标签
+      setRouterResults(prev => {
+        const u = [...prev];
+        u[index] = null;
+        return u;
+      });
 
       const imageData = await fileToBase64(file);
 
@@ -360,6 +367,15 @@ function App() {
         return updated;
       });
 
+      // 新增：保存路由检测结果
+      if (data.routerResult) {
+        setRouterResults(prev => {
+          const u = [...prev];
+          u[index] = data.routerResult;
+          return u;
+        });
+      }
+
       // 直接输出识别结果，不添加任何前缀
       typewriterEffect(finalText, index, !isBatch);
       markComplete(index);
@@ -404,6 +420,7 @@ function App() {
       setImages(prev => [...prev, ...urls]);
       setResults(prev => [...prev, ...new Array(expandedFiles.length).fill('')]);
       setResultModels(prev => [...prev, ...new Array(expandedFiles.length).fill(null)]);
+      setRouterResults(prev => [...prev, ...new Array(expandedFiles.length).fill(null)]); // 新增：扩展路由结果数组
       setCurrentIndex(startIdx);
       setIsLoading(false);
       const isBatch = expandedFiles.length > 1;
@@ -703,6 +720,10 @@ function App() {
                   <div className={`image-status-badge ${currentStatus.className}`}>
                     {currentStatus.text}
                   </div>
+                )}
+                {/* 新增：路由检测结果标签 */}
+                {routerResults[currentIndex] && (
+                  <div className="router-info-badge">路由器检测为：{routerResults[currentIndex]}</div>
                 )}
               </div>
             </div>
