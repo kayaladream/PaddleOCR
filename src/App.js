@@ -55,23 +55,12 @@ const preprocessText = (text) => {
   text = text.replace(/[a-zA-Z_]*<\|\/?ref\|>\[\[.*?\]\]<\|\/?det\|>/g, '');
   text = text.replace(/<\|\/?(ref|det|grounding)\|>/g, '');
   text = text.replace(/\[\[\d+,\s*\d+,\s*\d+,\s*\d+\]\]/g, '');
-  // === 🚀 新增：智能修复 LaTeX 定界符与小模型语法错误 ===
-  
-  // 1. 将 LaTeX 的 \( \) 和 \[ \] 标准化为 $ 和 $$
-  // 注意：在 JS 的 replace 中，$$ 代表插入一个 $ 字符，$$$$ 代表插入两个
   text = text.replace(/\\\(/g, '$$');
   text = text.replace(/\\\)/g, '$$');
   text = text.replace(/\\\[/g, '$$$$');
   text = text.replace(/\\\]/g, '$$$$');
-
-  // 2. 修复模型漏掉下划线的常见错误 (如 C{3}^{1} -> C_{3}^{1}, X{1} -> X_{1})
-  // 匹配：大写或小写字母紧跟 {数字}
   text = text.replace(/([A-Za-z])\{(\d+)\}/g, '$1_{$2}');
-  
-  // 3. 修复求和符号漏掉下划线 (如 \sum{i=1}^{n} -> \sum_{i=1}^{n})
   text = text.replace(/\\sum\{([^}]+)\}/g, '\\sum_{$1}');
-  
-  // =================================================
   const tables = [];
   text = text.replace(/\|[^\n]+\|\n\|[-|\s]+\|(?:\n\|[^\n]+\|)+/g, (match) => {
     tables.push(match);
@@ -207,7 +196,7 @@ function App() {
   const [images, setImages] = useState([]);
   const [results, setResults] = useState([]);
   const [resultModels, setResultModels] = useState([]);
-  const [routerResults, setRouterResults] = useState([]); // 新增：路由检测结果
+  const [routerResults, setRouterResults] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -287,7 +276,6 @@ function App() {
         newResults[index] = '';
         return newResults;
       });
-      // 清空旧的路由标签
       setRouterResults(prev => {
         const u = [...prev];
         u[index] = null;
@@ -296,38 +284,49 @@ function App() {
 
       const imageData = await fileToBase64(file);
 
-      // ===== 新增：提前发起分类请求，尽早显示路由标签 =====
+      // ===== 提前分类请求（仅 PaddleOCR-VL-1.5）—— 静默重试3次 =====
       if (selectedModel.channel === 'silicon' && selectedModel.apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
-        // 异步发送分类请求（不阻塞识别请求的发送）
-        fetch('/api/recognize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            imageData,
-            mimeType: file.type,
-            channel: 'silicon',
-            apiName: 'PaddlePaddle/PaddleOCR-VL-1.5',
-            classifyOnly: true,   // 仅分类
-          }),
-        })
-          .then(res => res.json())
-          .then(data => {
-            if (data.routerResult) {
-              setRouterResults(prev => {
-                const u = [...prev];
-                u[index] = data.routerResult;
-                return u;
+        const classifyWithRetry = async () => {
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              const res = await fetch('/api/recognize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  imageData,
+                  mimeType: file.type,
+                  channel: 'silicon',
+                  apiName: 'PaddlePaddle/PaddleOCR-VL-1.5',
+                  classifyOnly: true,
+                }),
               });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.routerResult) {
+                  setRouterResults(prev => {
+                    const u = [...prev];
+                    u[index] = data.routerResult;
+                    return u;
+                  });
+                }
+                return; // 成功，停止重试
+              }
+            } catch (err) {
+              console.error(`分类请求重试 ${attempt}/3 失败`, err);
             }
-          })
-          .catch(err => console.error('提前分类请求失败:', err));
-        // 不等待分类结果，立即继续后面的识别流程
+            if (attempt < 3) {
+              await new Promise(r => setTimeout(r, 500)); // 重试前等待500ms
+            }
+          }
+          // 3次全失败，不显示任何内容（routerResults 保持 null）
+        };
+        classifyWithRetry(); // 不 await，与识别请求并发
       }
 
-      // 原有的重试逻辑和识别请求
+      // ===== 正式识别请求（所有模型统一重试3次） =====
       let response;
       let lastError = null;
-      const maxRetries = selectedModel.channel === 'baidu' ? 3 : 1;
+      const maxRetries = 3; // 全部渠道统一重试3次
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
@@ -343,6 +342,7 @@ function App() {
             } else if (msg.includes('环境变量')) {
               reason = '服务配置错误';
             }
+
             setResults(prev => {
               const updated = [...prev];
               updated[index] = `> ⚠️ **${reason}，将在 10 秒后自动重试（${attempt}/${maxRetries}）**\n>\n> 🔄 **正在重试中...**`;
@@ -366,6 +366,7 @@ function App() {
             const errorData = await response.json().catch(() => ({ error: '请求失败' }));
             throw new Error(errorData.error || '服务异常');
           }
+
           break;
         } catch (err) {
           lastError = err;
@@ -384,14 +385,12 @@ function App() {
       const data = await response.json();
       const finalText = preprocessText(data.text || '');
 
-      // 记录模型信息
       setResultModels(prev => {
         const updated = [...prev];
         updated[index] = { channel: selectedModel.channel, name: selectedModel.name };
         return updated;
       });
 
-      // 如果识别响应中也带了 routerResult（可能稍后到达），也更新一下（防止提前分类失败的情况）
       if (data.routerResult) {
         setRouterResults(prev => {
           const u = [...prev];
@@ -443,7 +442,7 @@ function App() {
       setImages(prev => [...prev, ...urls]);
       setResults(prev => [...prev, ...new Array(expandedFiles.length).fill('')]);
       setResultModels(prev => [...prev, ...new Array(expandedFiles.length).fill(null)]);
-      setRouterResults(prev => [...prev, ...new Array(expandedFiles.length).fill(null)]); // 新增：扩展路由结果数组
+      setRouterResults(prev => [...prev, ...new Array(expandedFiles.length).fill(null)]);
       setCurrentIndex(startIdx);
       setIsLoading(false);
       const isBatch = expandedFiles.length > 1;
