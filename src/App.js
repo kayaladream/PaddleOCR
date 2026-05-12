@@ -36,7 +36,7 @@ const MODELS = [
     id: 'sili-vl-1.5',
     name: 'PaddleOCR-VL-1.5',
     badge: 'silicon.png',
-    desc: '硅基流动加速的业界SOTA文档大模型',
+    desc: '硅基流动加速版，识别能力较百度官方弱，轻量备用',
     channel: 'silicon',
     apiName: 'PaddlePaddle/PaddleOCR-VL-1.5'
   },
@@ -107,6 +107,14 @@ const fileToBase64 = (file) => {
     reader.onloadend = () => resolve(reader.result.split(',')[1]);
     reader.readAsDataURL(file);
   });
+};
+
+// ====== 带超时的 fetch 工具 ======
+const fetchWithTimeout = (url, options, timeout = 30000) => {
+  const controller = new AbortController();
+  const fetchOptions = { ...options, signal: controller.signal };
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  return fetch(url, fetchOptions).finally(() => clearTimeout(timeoutId));
 };
 
 const turndownService = new TurndownService({
@@ -285,12 +293,13 @@ function App() {
 
       const imageData = await fileToBase64(file);
 
-      // ===== 提前分类请求（仅 PaddleOCR-VL-1.5）—— 静默重试3次，失败时显示错误标签 =====
+      // ===== 提前分类请求（仅 PaddleOCR-VL-1.5）—— 静默重试3次，5秒超时，失败时显示错误标签 =====
       if (selectedModel.channel === 'silicon' && selectedModel.apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
         const classifyWithRetry = async () => {
           for (let attempt = 1; attempt <= 3; attempt++) {
             try {
-              const res = await fetch('/api/recognize', {
+              // 使用带超时的 fetch，5 秒后强制中断
+              const res = await fetchWithTimeout('/api/recognize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -300,7 +309,7 @@ function App() {
                   apiName: 'PaddlePaddle/PaddleOCR-VL-1.5',
                   classifyOnly: true,
                 }),
-              });
+              }, 5000); // 5秒超时
               if (res.ok) {
                 const data = await res.json();
                 if (data.routerResult) {
@@ -330,7 +339,7 @@ function App() {
         classifyWithRetry(); // 不 await，与识别请求并发
       }
 
-      // ===== 正式识别请求（所有模型统一重试3次） =====
+      // ===== 正式识别请求（所有模型统一重试3次，30秒超时） =====
       let response;
       let lastError = null;
       const maxRetries = 3;
@@ -357,7 +366,7 @@ function App() {
             });
           }
 
-          response = await fetch('/api/recognize', {
+          response = await fetchWithTimeout('/api/recognize', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -367,7 +376,7 @@ function App() {
               channel: selectedModel.channel,
               apiName: selectedModel.apiName
             }),
-          });
+          }, 30000); // 30秒超时
 
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: '请求失败' }));
@@ -376,7 +385,11 @@ function App() {
 
           break;
         } catch (err) {
-          lastError = err;
+          if (err.name === 'AbortError') {
+            lastError = new Error('请求超时，请检查网络连接');
+          } else {
+            lastError = err;
+          }
           if (attempt < maxRetries) {
             await new Promise(resolve => setTimeout(resolve, 10000));
           } else {
@@ -418,7 +431,12 @@ function App() {
 
     } catch (error) {
       console.error('识别失败:', error);
-      const errMsg = `> ⚠️ **系统提示：图片处理失败**\n>\n> ${error.message}`;
+      let errMsg;
+      if (error.name === 'AbortError' || error.message.includes('超时')) {
+        errMsg = '> ⚠️ **系统提示：请求超时，请检查网络连接**';
+      } else {
+        errMsg = `> ⚠️ **系统提示：图片处理失败**\n>\n> ${error.message}`;
+      }
       setResults(prev => {
         const updated = [...prev];
         updated[index] = errMsg;
