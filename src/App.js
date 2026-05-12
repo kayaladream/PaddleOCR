@@ -55,6 +55,23 @@ const preprocessText = (text) => {
   text = text.replace(/[a-zA-Z_]*<\|\/?ref\|>\[\[.*?\]\]<\|\/?det\|>/g, '');
   text = text.replace(/<\|\/?(ref|det|grounding)\|>/g, '');
   text = text.replace(/\[\[\d+,\s*\d+,\s*\d+,\s*\d+\]\]/g, '');
+  // === 🚀 新增：智能修复 LaTeX 定界符与小模型语法错误 ===
+  
+  // 1. 将 LaTeX 的 \( \) 和 \[ \] 标准化为 $ 和 $$
+  // 注意：在 JS 的 replace 中，$$ 代表插入一个 $ 字符，$$$$ 代表插入两个
+  text = text.replace(/\\\(/g, '$$');
+  text = text.replace(/\\\)/g, '$$');
+  text = text.replace(/\\\[/g, '$$$$');
+  text = text.replace(/\\\]/g, '$$$$');
+
+  // 2. 修复模型漏掉下划线的常见错误 (如 C{3}^{1} -> C_{3}^{1}, X{1} -> X_{1})
+  // 匹配：大写或小写字母紧跟 {数字}
+  text = text.replace(/([A-Za-z])\{(\d+)\}/g, '$1_{$2}');
+  
+  // 3. 修复求和符号漏掉下划线 (如 \sum{i=1}^{n} -> \sum_{i=1}^{n})
+  text = text.replace(/\\sum\{([^}]+)\}/g, '\\sum_{$1}');
+  
+  // =================================================
   const tables = [];
   text = text.replace(/\|[^\n]+\|\n\|[-|\s]+\|(?:\n\|[^\n]+\|)+/g, (match) => {
     tables.push(match);
