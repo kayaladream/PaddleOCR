@@ -135,7 +135,7 @@ export default async function handler(req, res) {
 
             // 生成路由标签
             if (dynamicPrompt === 'ERROR:') {
-                routerLabel = '路由器异常，已降级';
+                routerLabel = '路由分类服务异常，使用默认OCR';
             } else if (dynamicPrompt?.includes('Table')) {
                 routerLabel = '表格';
             } else if (dynamicPrompt?.includes('Formula')) {
