@@ -109,7 +109,6 @@ export default async function handler(req, res) {
       return res.json({ routerResult: routerLabel });
     }
 
-    if (channel === 'baidu') {
     // ============================================
     // 渠道一：Aistudio Baidu
     // ============================================
