@@ -264,15 +264,22 @@ export default async function handler(req, res) {
 
         // ----- DeepSeek-OCR 空白图片乱码过滤 -----
         if (apiName === 'deepseek-ai/DeepSeek-OCR') {
-          // 临时日志（可在 Vercel Logs 中查看效果）
           console.log('DeepSeek rawText (after full clean):', rawText.substring(0, 200));
 
-          // 移除所有数字、点号、井号、空格、减号、斜杠、尖括号、方括号、竖线、等号、星号等无意义符号
-          const stripped = rawText.replace(/[\d.#\s\-–—_\/\\<>\|\[\]\*=\+]+/g, '');
-          // 检查剩余内容中是否包含至少一个字母或中文
-          const hasMeaningfulChar = /[a-zA-Z\u4e00-\u9fa5]/.test(stripped);
+          // 1. 移除所有坐标标记 [[...]] 和 <|...|> 标签
+          let cleaned = rawText.replace(/\[\[.*?\]\]/g, '');
+          cleaned = cleaned.replace(/<\|[^>]*\|>/g, '');
 
-          if (!stripped || stripped.length < 3 || !hasMeaningfulChar) {
+          // 2. 移除所有数字、点号、井号、空格、减号、斜杠、方括号、竖线、等号、星号等符号
+          cleaned = cleaned.replace(/[\d.#\s\-–—_\/\\\(\)\[\]\*=\+,|]+/g, '');
+
+          // 3. 移除常见无意义英文占位符（如 "text"），不区分大小写
+          cleaned = cleaned.replace(/text/gi, '');
+
+          // 4. 检查剩余内容中是否包含至少一个字母或中文
+          const hasMeaningfulChar = /[a-zA-Z\u4e00-\u9fa5]/.test(cleaned);
+
+          if (!cleaned.trim() || !hasMeaningfulChar) {
             console.log('DeepSeek 检测到空白图片或无效乱码，清空结果');
             rawText = '';   // 置空，触发系统统一提示
           }
