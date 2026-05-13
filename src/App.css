@@ -1,10 +1,8 @@
 /* ================================================
    PaddleOCR 前端样式 - 最终完整版
-   1. 右侧标题固定，编辑区单独滚动
-   2. 右侧高度对齐左侧，内部滚动，阴影完整
-   3. 打字机效果文字不溢出
-   4. 导航栏在桌面端垂直居中
-   5. 滚动条恢复原版简约风格，无闪烁
+   关键修复：
+   - 聚焦边框四周均匀（无额外阴影）
+   - 打字机效果时也有编辑框外观
    ================================================ */
 
 @keyframes gradientMove {
@@ -304,16 +302,21 @@ header p {
   line-height: 1.8;
 }
 
-/* ========== 流式输出时滚动区域 ========== */
+/* ========== 流式输出区域（现在也有编辑框外观） ========== */
 .gradient-text {
   color: #1d1d1f;
   position: relative;
   min-height: 50px;
-  font-size: 1.1rem;
+  font-size: 1.13rem;
   font-family: "微软雅黑", serif;
-  overflow-y: auto;          /* 打字机效果不溢出 */
+  overflow-y: auto;
   flex: 1;
   min-height: 0;
+  /* 新增：与编辑框一模一样的外观 */
+  border: 1px solid #ced4da;
+  border-radius: 8px;
+  padding: 15px;
+  background-color: #f8f9fa;
 }
 
 .gradient-text > div {
@@ -579,7 +582,7 @@ main.has-content {
   background: #2A4CF0;
 }
 
-/* 不再给 .edit-content-editable、.gradient-text 添加自定义滚动条，使用系统默认样式 */
+/* 不再给 .edit-content-editable、.gradient-text 添加自定义滚动条 */
 
 .url-button {
   background: transparent;
@@ -760,7 +763,7 @@ main.has-content {
   .image-status-badge { top: 8px; right: 8px; padding: 2px 8px; font-size: 0.65rem; }
 }
 
-/* ========== 编辑框（标题固定，垂直滚动，禁止横向滚动条以杜绝闪烁） ========== */
+/* ========== 编辑框（标题固定，垂直滚动，聚焦边框均匀） ========== */
 .edit-content-editable {
   width: 100%;
   flex: 1;
@@ -784,8 +787,7 @@ main.has-content {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .edit-content-editable:focus {
-  border-color: #86b7fe;
-  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  border-color: #86b7fe;       /* 仅蓝色边框，不加阴影，四周均匀 */
 }
 .edit-content-editable strong { font-weight: bold; }
 .edit-content-editable em { font-style: italic; }
