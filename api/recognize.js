@@ -257,14 +257,19 @@ export default async function handler(req, res) {
         rawText = rawText.replace(/<\|ref\|>/g, '').replace(/<\/\|ref\|>/g, '');
         rawText = rawText.replace(/<\|det\|>/g, '').replace(/<\/\|det\|>/g, '');
         rawText = rawText.replace(/\n{3,}/g, '\n\n');
-          // --- 新增：DeepSeek-OCR 空白图片乱码过滤 ---
-          if (apiName === 'deepseek-ai/DeepSeek-OCR') {
-            // 移除所有数字、点号、井号、空白后，如果剩余内容为空或极短，视为无效
-            const stripped = rawText.replace(/[\d.#\s-]/g, '');
-            if (!stripped || stripped.length < 3) {
-              rawText = '';  // 置空，触发后续“未检测到可识别文本”提示
-            }
+        // ----- DeepSeek-OCR 空白图片乱码过滤 -----
+        if (apiName === 'deepseek-ai/DeepSeek-OCR') {
+          // 临时日志：查看清洗后的文本内容，部署后可去 Vercel Logs 中查看
+          console.log('DeepSeek rawText (after clean):', rawText.substring(0, 200));
+
+          // 去除所有数字、点号、井号、空格、换行、减号等无意义字符
+          const stripped = rawText.replace(/[\d.#\s\-–—]/g, '');
+          // 如果剩余内容为空，或者长度小于 3，就认为是空白图片产生的乱码
+          if (!stripped || stripped.length < 3) {
+            console.log('DeepSeek 检测到空白图片，清空结果');
+            rawText = '';
           }
+        }
         recognizedText = rawText.trim();
       }
     } else {
