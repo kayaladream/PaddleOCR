@@ -54,7 +54,6 @@ body {
   min-height: 100vh;
   position: relative;
   overflow-x: hidden;
-  zoom: 0.92;
 }
 
 body::before {
@@ -214,13 +213,10 @@ header p {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(23, 50, 224, 0.1);
   transition: none;
-  
-  box-sizing: border-box; 
-  display: flex;
-  flex-direction: column;
-  overflow: hidden; 
-  flex: 1;
-  min-height: 0;
+  overflow-y: auto;
+  max-height: 100%;
+  height: auto;
+  scroll-behavior: smooth;
 }
 
 .result-container:hover {
@@ -241,12 +237,6 @@ header p {
   width: 100%;
   padding: 0 0 1rem 0;
   transition: none;
-  
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0; 
 }
 
 .result-text .result-header {
@@ -298,18 +288,12 @@ header p {
   line-height: 1.8;
 }
 
-/* 流式输入文本自适应高度滚动 */
 .gradient-text {
   color: #1d1d1f;
   position: relative;
+  min-height: 50px;
   font-size: 1.1rem;
   font-family: "微软雅黑", serif;
-  
-  box-sizing: border-box;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 5px;
 }
 
 .gradient-text > div {
@@ -524,6 +508,14 @@ main.has-content {
   opacity: 0;
   animation: fadeIn 0.5s ease-out forwards;
   animation-delay: 0.2s;
+  max-height: calc(80vh - 90px);
+  position: sticky;
+  top: 2rem;
+  align-self: stretch;
+}
+
+.result-container {
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -553,11 +545,6 @@ main.has-content {
     width: 100%;
     max-width: 600px;
     margin-top: 2rem;
-  }
-  /* 手机端防溢出 */
-  .result-container {
-    height: auto;
-    max-height: 60vh;
   }
 }
 
@@ -653,6 +640,7 @@ main.has-content {
   width: 100%;
 }
 
+/* ========== 导航栏修正版：左箭头+页码+右箭头居中，进度条靠右 ========== */
 .image-navigation {
   display: flex;
   align-items: center;
@@ -663,6 +651,7 @@ main.has-content {
   width: 100%;
 }
 
+/* 进度指示器：绝对定位在右侧，垂直居中 */
 .progress-indicator {
   position: absolute;
   right: 0;
@@ -678,6 +667,7 @@ main.has-content {
   line-height: 1.4;
 }
 
+/* 页码样式 */
 .image-counter {
   font-size: 0.9rem;
   color: #86868b;
@@ -686,6 +676,7 @@ main.has-content {
   white-space: nowrap;
 }
 
+/* 左右箭头按钮样式 */
 .nav-button {
   background: rgb(23, 50, 224);
   color: white;
@@ -712,6 +703,7 @@ main.has-content {
   background: #2A4CF0;
 }
 
+/* 图片状态角标 */
 .image-status-badge {
   position: absolute;
   top: 12px;
@@ -745,6 +737,7 @@ main.has-content {
   100% { opacity: 0.7; }
 }
 
+/* 移动端适配 */
 @media (max-width: 768px) {
   .image-navigation {
     gap: 0.5rem;
@@ -768,19 +761,13 @@ main.has-content {
     padding: 2px 8px;
     font-size: 0.65rem;
   }
-
-   {
-    top: 32px;
-    right: 8px;
-    padding: 2px 6px;
-    font-size: 0.65rem;
-  }
 }
 
+/* 编辑内容可编辑区域样式 */
 .edit-content-editable {
   width: 100%;
-  flex: 1;
-  min-height: 0;
+  min-height: 400px;
+  max-height: calc(80vh - 150px);
   overflow-y: auto;
   font-size: 1.13rem;
   font-family: "微软雅黑", serif;
@@ -788,7 +775,6 @@ main.has-content {
   border: 1px solid #ced4da;
   border-radius: 8px;
   padding: 15px;
-  
   box-sizing: border-box;
   margin-top: 1rem;
   background-color: #f8f9fa;
@@ -1177,58 +1163,4 @@ main.has-content {
 @media (max-width: 768px) {
   .katex { font-size: 1em; }
   .latex-block { max-width: 100%; overflow-x: auto; }
-}
-
-.router-info-badge {
-  position: absolute;
-  top: 42px;
-  right: 12px;
-  padding: 2px 8px;
-  font-size: 0.7rem;
-  font-weight: 500;
-  color: #009a9b;
-  background: rgba(76, 175, 80, 0.15);
-  border-radius: 20px;
-  white-space: nowrap;
-  z-index: 5;
-  pointer-events: none;
-}
-
-.breathe-ring {
-  display: inline-block;
-  width: 1em;
-  height: 1em;
-  border: 0.15em solid #1233E0;
-  border-radius: 50%;
-  animation: breatheRing 1.6s ease-in-out infinite;
-  vertical-align: middle;
-  margin-left: 0.25em; 
-  margin-right: 0.25em;
-}
-@keyframes breatheRing {
-  0%, 100% {
-    transform: scale(0.8);
-    opacity: 0.4;
-  }
-  50% {
-    transform: scale(1.3);
-    opacity: 1;
-  }
-}
-
-@media (min-width: 993px) {
-  main.has-content {
-    align-items: stretch;
-  }
-  .result-section {
-    align-self: stretch; 
-    position: relative; 
-  }
-  .result-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-  }
 }
