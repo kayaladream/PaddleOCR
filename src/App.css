@@ -1,6 +1,10 @@
 /* ================================================
    PaddleOCR 前端样式 - 最终完整版
-   修复滚动条光标和横向滚动条过大问题
+   1. 右侧标题固定，编辑区单独滚动
+   2. 右侧高度对齐左侧，内部滚动，阴影完整
+   3. 打字机效果文字不溢出
+   4. 导航栏在桌面端垂直居中
+   5. 滚动条恢复原版简约风格，无闪烁
    ================================================ */
 
 @keyframes gradientMove {
@@ -520,7 +524,7 @@ main.has-content {
   margin-right: 52%;
 }
 
-/* ========== 右侧结果区域（高度对齐左侧） ========== */
+/* ========== 右侧结果区域（绝对定位，高度对齐左侧） ========== */
 .result-section {
   position: absolute;
   top: 0;
@@ -558,41 +562,24 @@ main.has-content {
   }
 }
 
-/* ========== 滚动条美化（修复：同时定义垂直和水平尺寸） ========== */
-.result-container::-webkit-scrollbar,
-.edit-content-editable::-webkit-scrollbar,
-.gradient-text::-webkit-scrollbar {
-  width: 8px;                /* 垂直滚动条宽度 */
-  height: 8px;               /* 水平滚动条高度 */
+/* ========== 滚动条美化：仅作用于 .result-container（原版风格） ========== */
+.result-container::-webkit-scrollbar {
+  width: 8px;
 }
-
-.result-container::-webkit-scrollbar-track,
-.edit-content-editable::-webkit-scrollbar-track,
-.gradient-text::-webkit-scrollbar-track {
+.result-container::-webkit-scrollbar-track {
   background: #f1f1f1;
   border-radius: 4px;
 }
-
-.result-container::-webkit-scrollbar-thumb,
-.edit-content-editable::-webkit-scrollbar-thumb,
-.gradient-text::-webkit-scrollbar-thumb {
+.result-container::-webkit-scrollbar-thumb {
   background: rgb(23, 50, 224);
   border-radius: 4px;
   transition: all 0.3s ease;
 }
-
-.result-container::-webkit-scrollbar-thumb:hover,
-.edit-content-editable::-webkit-scrollbar-thumb:hover,
-.gradient-text::-webkit-scrollbar-thumb:hover {
+.result-container::-webkit-scrollbar-thumb:hover {
   background: #2A4CF0;
 }
 
-/* 让滚动条角落也保持统一 */
-.result-container::-webkit-scrollbar-corner,
-.edit-content-editable::-webkit-scrollbar-corner,
-.gradient-text::-webkit-scrollbar-corner {
-  background: #f1f1f1;
-}
+/* 不再给 .edit-content-editable、.gradient-text 添加自定义滚动条，使用系统默认样式 */
 
 .url-button {
   background: transparent;
@@ -773,14 +760,14 @@ main.has-content {
   .image-status-badge { top: 8px; right: 8px; padding: 2px 8px; font-size: 0.65rem; }
 }
 
-/* ========== 编辑框（标题固定，编辑区独自滚动，光标修复） ========== */
+/* ========== 编辑框（标题固定，垂直滚动，禁止横向滚动条以杜绝闪烁） ========== */
 .edit-content-editable {
   width: 100%;
   flex: 1;
   min-height: 150px;
   max-height: none;
   overflow-y: auto;           /* 垂直滚动 */
-  overflow-x: auto;           /* 水平方向也允许滚动，但不会莫名变大 */
+  overflow-x: hidden;         /* 禁止横向滚动条，内容自动换行不会超框 */
   font-size: 1.13rem;
   font-family: "微软雅黑", serif;
   line-height: 1.5;
@@ -791,9 +778,8 @@ main.has-content {
   margin-top: 1rem;
   background-color: #f8f9fa;
   color: #212529;
-  /* 移除 cursor: text; 让浏览器自动处理，滚动条上变为箭头 */
-  white-space: pre-wrap;
-  word-wrap: break-word;
+  white-space: pre-wrap;      /* 保留空格与换行，同时允许自动换行 */
+  word-wrap: break-word;      /* 长单词/链接强制断行 */
   outline: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
