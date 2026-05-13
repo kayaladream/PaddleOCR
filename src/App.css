@@ -213,10 +213,11 @@ header p {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(23, 50, 224, 0.1);
   transition: none;
+  /* 修改：使内部可弹性布局并撑满高度 */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   overflow-y: auto;
-  max-height: 100%;
-  height: auto;
-  scroll-behavior: smooth;
 }
 
 .result-container:hover {
@@ -484,9 +485,10 @@ main {
   align-items: center;
 }
 
+/* 修改：左右分栏时强制两列等高 */
 main.has-content {
   flex-direction: row;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 2.5rem;
 }
 
@@ -502,33 +504,18 @@ main.has-content {
   max-width: 600px;
 }
 
+/* 修改：结果区域不再固定高度，改为弹性布局撑满 */
 .result-section {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
   opacity: 0;
   animation: fadeIn 0.5s ease-out forwards;
   animation-delay: 0.2s;
-  max-height: calc(80vh - 90px);
-  position: sticky;
-  top: 2rem;
-  align-self: stretch;
 }
 
-.result-container {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.upload-section.with-image .upload-zone {
-  padding: 1.8rem 0.9rem;
-  margin-bottom: 1.5rem;
-  border-radius: 15px;
-  display: flex;
-  flex-direction: column;
-  min-height: 100px;
-}
-
+/* 移动端回退为纵向排列 */
 @media (max-width: 992px) {
   main.has-content {
     flex-direction: column;
@@ -539,9 +526,6 @@ main.has-content {
     max-width: 600px;
   }
   .result-section {
-    max-height: 60vh;
-    position: relative;
-    top: 0;
     width: 100%;
     max-width: 600px;
     margin-top: 2rem;
@@ -761,20 +745,14 @@ main.has-content {
     padding: 2px 8px;
     font-size: 0.65rem;
   }
-
-   {
-    top: 32px;
-    right: 8px;
-    padding: 2px 6px;
-    font-size: 0.65rem;
-  }
 }
 
-/* 编辑内容可编辑区域样式 */
+/* 编辑内容可编辑区域样式 – 关键修改：自适应高度 */
 .edit-content-editable {
   width: 100%;
-  min-height: 400px;
-  max-height: calc(80vh - 150px);
+  flex: 1;
+  min-height: 150px;          /* 最小高度，防止空白时过小 */
+  max-height: none;           /* 去掉之前的高度上限 */
   overflow-y: auto;
   font-size: 1.13rem;
   font-family: "微软雅黑", serif;
@@ -796,23 +774,12 @@ main.has-content {
   border-color: #86b7fe;
   box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
 }
-.edit-content-editable strong {
-  font-weight: bold;
-}
-.edit-content-editable em {
-  font-style: italic;
-}
-.edit-content-editable p {
-  margin: 0 0 0em 0;
-}
+.edit-content-editable strong { font-weight: bold; }
+.edit-content-editable em { font-style: italic; }
+.edit-content-editable p { margin: 0 0 0em 0; }
 .edit-content-editable ul,
-.edit-content-editable ol {
-  padding-left: 2em;
-  margin: 0 0 1em 0;
-}
-.edit-content-editable li {
-  margin-bottom: 0.2em;
-}
+.edit-content-editable ol { padding-left: 2em; margin: 0 0 1em 0; }
+.edit-content-editable li { margin-bottom: 0.2em; }
 .edit-content-editable code {
   background-color: rgba(27, 31, 35, 0.05);
   padding: .2em .4em;
@@ -1174,7 +1141,7 @@ main.has-content {
 
 .router-info-badge {
   position: absolute;
-  top: 42px;            /* 位于状态角标下方 */
+  top: 42px;
   right: 12px;
   padding: 2px 8px;
   font-size: 0.7rem;
