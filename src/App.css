@@ -210,17 +210,18 @@ header p {
   -webkit-backdrop-filter: blur(10px);
   border-radius: 20px;
   padding: 2rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(23, 50, 224, 0.1);
-  transition: none;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow-y: auto;
+  transition: none;
+  box-sizing: border-box;
 }
 
 .result-container:hover {
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.12);
 }
 
 .loading.result-loading {
@@ -485,9 +486,8 @@ main {
 }
 
 main.has-content {
-  flex-direction: row;
-  align-items: stretch;
-  gap: 2.5rem;
+  position: relative;
+  display: block;
 }
 
 .upload-section {
@@ -500,36 +500,46 @@ main.has-content {
 .upload-section.with-image {
   width: 50%;
   max-width: 600px;
+  margin-right: 52%;
 }
 
 .result-section {
-  flex: 1;
-  min-width: 0;
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: calc(50% - 1.25rem);
+  height: 100%;
   display: flex;
   flex-direction: column;
   opacity: 0;
   animation: fadeIn 0.5s ease-out forwards;
   animation-delay: 0.2s;
-  min-height: 0;
-  overflow: hidden;
 }
 
 @media (max-width: 992px) {
   main.has-content {
+    display: flex;
     flex-direction: column;
     align-items: center;
+    position: static;
   }
+
   .upload-section.with-image {
     width: 100%;
     max-width: 600px;
+    margin-right: 0;
   }
+
   .result-section {
+    position: relative;
     width: 100%;
     max-width: 600px;
+    height: auto;
     margin-top: 2rem;
   }
 }
 
+/* 滚动条美化 */
 .result-container::-webkit-scrollbar {
   width: 8px;
 }
@@ -715,28 +725,11 @@ main.has-content {
 }
 
 @media (max-width: 768px) {
-  .image-navigation {
-    gap: 0.5rem;
-  }
-  .image-counter {
-    font-size: 0.8rem;
-    min-width: 50px;
-  }
-  .nav-button {
-    width: 32px;
-    height: 32px;
-    font-size: 1rem;
-  }
-  .progress-indicator {
-    padding: 2px 6px;
-    font-size: 0.6rem;
-  }
-  .image-status-badge {
-    top: 8px;
-    right: 8px;
-    padding: 2px 8px;
-    font-size: 0.65rem;
-  }
+  .image-navigation { gap: 0.5rem; }
+  .image-counter { font-size: 0.8rem; min-width: 50px; }
+  .nav-button { width: 32px; height: 32px; font-size: 1rem; }
+  .progress-indicator { padding: 2px 6px; font-size: 0.6rem; }
+  .image-status-badge { top: 8px; right: 8px; padding: 2px 8px; font-size: 0.65rem; }
 }
 
 .edit-content-editable {
