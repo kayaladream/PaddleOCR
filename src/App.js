@@ -667,7 +667,7 @@ function App() {
     ? `（${resultModels[currentIndex].channel === 'baidu' ? '百度' : '硅基流动'} · ${resultModels[currentIndex].name}）`
     : '';
   const currentIsStreaming = streamingStatus[currentIndex] || false;
-  const showResultsSection = results.some(r => r !== '') || isLoading || Object.values(streamingStatus).some(v => v);
+  const showResultsSection = results.some(r => r && r !== '') || Object.values(streamingStatus).some(v => v);
 
   const getCurrentImageStatus = () => {
     if (streamingStatus[currentIndex]) return { text: '识别中', className: 'status-streaming' };
