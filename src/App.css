@@ -205,6 +205,7 @@ header p {
   font-size: 1.1rem;
 }
 
+/* ===== 核心修复区域：结果面板容器 ===== */
 .result-container {
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
@@ -221,6 +222,10 @@ header p {
   overflow: hidden; 
   flex: 1;
   min-height: 0;
+  
+  /* 修复：禁止在外围空白区域意外选中文字，防止拖拽干扰 */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .result-container:hover {
@@ -235,6 +240,7 @@ header p {
   padding: 2rem 0;
 }
 
+/* ===== 核心修复区域：自适应内部区域 ===== */
 .result-text {
   line-height: 1.6;
   color: #1d1d1f;
@@ -259,6 +265,10 @@ header p {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+  
+  /* 恢复顶部的标题也可以被选中复制 */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .result-text table,
@@ -310,6 +320,10 @@ header p {
   min-height: 0;
   overflow-y: auto;
   padding-right: 5px;
+  
+  /* 恢复流式输出时的文字可选中状态 */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .gradient-text > div {
@@ -405,6 +419,9 @@ header p {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .upload-zone.dragging {
@@ -554,7 +571,6 @@ main.has-content {
     max-width: 600px;
     margin-top: 2rem;
   }
-  /* 手机端防溢出 */
   .result-container {
     height: auto;
     max-height: 60vh;
@@ -610,6 +626,10 @@ main.has-content {
   transition: all 0.3s ease;
   background: rgba(255, 255, 255, 0.9);
   min-width: 0;
+  
+  /* 输入框允许选中编辑 */
+  user-select: text;
+  -webkit-user-select: text;
 }
 .url-input:focus {
   outline: none;
@@ -768,15 +788,9 @@ main.has-content {
     padding: 2px 8px;
     font-size: 0.65rem;
   }
-
-   {
-    top: 32px;
-    right: 8px;
-    padding: 2px 6px;
-    font-size: 0.65rem;
-  }
 }
 
+/* ===== 文字编辑输入框自适应向下填满并滚动 ===== */
 .edit-content-editable {
   width: 100%;
   flex: 1;
@@ -798,6 +812,10 @@ main.has-content {
   word-wrap: break-word;
   outline: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  
+  /* 修复：保证编辑框内部无论在哪里拖拽都能正常选中和编辑 */
+  user-select: text;
+  -webkit-user-select: text;
 }
 .edit-content-editable:focus {
   border-color: #86b7fe;
@@ -1194,6 +1212,7 @@ main.has-content {
   pointer-events: none;
 }
 
+/* === 重试提示呼吸光环 === */
 .breathe-ring {
   display: inline-block;
   width: 1em;
@@ -1216,6 +1235,7 @@ main.has-content {
   }
 }
 
+/* ===== 仅针对电脑端生效的强制等高魔法代码 ===== */
 @media (min-width: 993px) {
   main.has-content {
     align-items: stretch;
