@@ -1,7 +1,6 @@
 /* ================================================
-   PaddleOCR 前端样式 - 完整版
-   修复：右侧标题栏固定，仅编辑区域可滚动
-   特点：右侧与左侧图片等高，阴影不裁切
+   PaddleOCR 前端样式 - 最终完整版
+   修复：流式输出文字不跑出框外
    ================================================ */
 
 @keyframes gradientMove {
@@ -210,7 +209,7 @@ header p {
   font-size: 1.1rem;
 }
 
-/* ========== 右侧结果容器（标题固定，编辑区滚动） ========== */
+/* ========== 右侧结果容器 ========== */
 .result-container {
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
@@ -222,8 +221,7 @@ header p {
   display: flex;
   flex-direction: column;
   height: 100%;
-  /* fix: 容器本身不滚动，让滚动交给子元素 */
-  overflow: visible;
+  overflow: visible;          /* 保持阴影完整，让内部子元素各自滚动 */
   box-sizing: border-box;
 }
 
@@ -243,13 +241,13 @@ header p {
   line-height: 1.6;
   color: #1d1d1f;
   width: 100%;
-  /* fix: 让 result-text 内部也弹性，方便编辑区撑开 */
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 0;                 /* 防止弹性溢出 */
+  min-height: 0;              /* 关键：允许内部滚动 */
   padding: 0 0 1rem 0;
   transition: none;
+  overflow: hidden;           /* 防止未限制的溢出 */
 }
 
 .result-text .result-header {
@@ -262,8 +260,7 @@ header p {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  /* fix: 标题不参与滚动，固定 */
-  flex-shrink: 0;
+  flex-shrink: 0;            /* 标题固定 */
 }
 
 .result-text table,
@@ -303,12 +300,16 @@ header p {
   line-height: 1.8;
 }
 
+/* ========== 流式输出时滚动区域（gradient-text） ========== */
 .gradient-text {
   color: #1d1d1f;
   position: relative;
   min-height: 50px;
   font-size: 1.1rem;
   font-family: "微软雅黑", serif;
+  overflow-y: auto;          /* 修复：打字机效果不溢出 */
+  flex: 1;
+  min-height: 0;
 }
 
 .gradient-text > div {
@@ -492,7 +493,7 @@ header p {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
-/* ========== 主容器：有内容时改为相对定位，准备绝对定位右侧 ========== */
+/* ========== 主容器 ========== */
 main {
   transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
@@ -519,7 +520,7 @@ main.has-content {
   margin-right: 52%;
 }
 
-/* ========== 右侧结果区域（绝对定位，高度 = 左侧高度） ========== */
+/* ========== 右侧结果区域（高度对齐左侧） ========== */
 .result-section {
   position: absolute;
   top: 0;
@@ -531,10 +532,9 @@ main.has-content {
   opacity: 0;
   animation: fadeIn 0.5s ease-out forwards;
   animation-delay: 0.2s;
-  /* 不设 overflow: hidden，保持阴影可见 */
 }
 
-/* ========== 移动端恢复为纵向布局 ========== */
+/* ========== 移动端恢复纵向布局 ========== */
 @media (max-width: 992px) {
   main.has-content {
     display: flex;
@@ -558,24 +558,28 @@ main.has-content {
   }
 }
 
-/* 滚动条美化（依然作用于编辑区滚动条） */
+/* 滚动条美化 */
 .result-container::-webkit-scrollbar,
-.edit-content-editable::-webkit-scrollbar {
+.edit-content-editable::-webkit-scrollbar,
+.gradient-text::-webkit-scrollbar {
   width: 8px;
 }
 .result-container::-webkit-scrollbar-track,
-.edit-content-editable::-webkit-scrollbar-track {
+.edit-content-editable::-webkit-scrollbar-track,
+.gradient-text::-webkit-scrollbar-track {
   background: #f1f1f1;
   border-radius: 4px;
 }
 .result-container::-webkit-scrollbar-thumb,
-.edit-content-editable::-webkit-scrollbar-thumb {
+.edit-content-editable::-webkit-scrollbar-thumb,
+.gradient-text::-webkit-scrollbar-thumb {
   background: rgb(23, 50, 224);
   border-radius: 4px;
   transition: all 0.3s ease;
 }
 .result-container::-webkit-scrollbar-thumb:hover,
-.edit-content-editable::-webkit-scrollbar-thumb:hover {
+.edit-content-editable::-webkit-scrollbar-thumb:hover,
+.gradient-text::-webkit-scrollbar-thumb:hover {
   background: #2A4CF0;
 }
 
@@ -655,12 +659,13 @@ main.has-content {
   width: 100%;
 }
 
-/* ========== 导航栏修正版：左箭头+页码+右箭头居中，进度条靠右 ========== */
+/* ========== 导航栏桌面端居中调整 ========== */
 .image-navigation {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 1rem;
+  margin-top: 0.5rem;
   margin-bottom: 1rem;
   position: relative;
   width: 100%;
@@ -757,13 +762,13 @@ main.has-content {
   .image-status-badge { top: 8px; right: 8px; padding: 2px 8px; font-size: 0.65rem; }
 }
 
-/* ========== 编辑框（自适应高度，独立滚动） ========== */
+/* ========== 编辑框（标题固定，编辑区独自滚动） ========== */
 .edit-content-editable {
   width: 100%;
   flex: 1;
   min-height: 150px;
   max-height: none;
-  overflow-y: auto;               /* fix: 编辑区自己滚动，标题不受影响 */
+  overflow-y: auto;
   font-size: 1.13rem;
   font-family: "微软雅黑", serif;
   line-height: 1.5;
