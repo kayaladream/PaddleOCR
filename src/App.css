@@ -787,7 +787,8 @@ main.has-content {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .edit-content-editable:focus {
-  border-color: #86b7fe;       /* 仅蓝色边框，不加阴影，四周均匀 */
+  border-color: #86b7fe;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
 }
 .edit-content-editable strong { font-weight: bold; }
 .edit-content-editable em { font-style: italic; }
