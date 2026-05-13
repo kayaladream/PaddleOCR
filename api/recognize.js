@@ -252,9 +252,42 @@ export default async function handler(req, res) {
       if (rawText) {
         rawText = parseOtslToHtml(rawText);
 
-        // 强力移除所有 <|...|> 格式的标签（如 <|ref|>、<|det|>）
-        rawText = rawText.replace(/<\|[^>]*\|>/g, '');
-        // 原有的清洗逻辑（保留）
+        // ===== DeepSeek-OCR 专有后处理：智能清洗 + 空白检测 =====
+        if (apiName === 'deepseek-ai/DeepSeek-OCR') {
+          console.log('DeepSeek rawText (after parse):', rawText.substring(0, 200));
+
+          // 1. 判断是否存在典型的空白/乱码特征（大量重复数字点号）
+          const looksLikeNoise = /(\d\.){5,}\d/.test(rawText) ||
+                                 /^[\d.#\s]+$/.test(rawText.trim());
+
+          // 2. 只有存在乱码特征时，才清理孤立的 "text" 噪声
+          if (looksLikeNoise) {
+            // 删除单独成行的 "text"（大小写不限）
+            rawText = rawText.replace(/^\s*text\s*$/gim, '');
+            // 删除被空白包围的独立 "text" 单词
+            rawText = rawText.replace(/\btext\b/gi, (match, offset, str) => {
+              const before = offset === 0 ? '' : str[offset - 1];
+              const after = offset + match.length >= str.length ? '' : str[offset + match.length];
+              return (/[\s\n]/.test(before) && /[\s\n]/.test(after)) ? '' : match;
+            });
+          }
+
+          // 3. 压缩多余空行
+          rawText = rawText.replace(/\n{3,}/g, '\n\n');
+
+          // 4. 空白图片检测（即使没有乱码特征，也可能完全为空）
+          let cleaned = rawText.replace(/\[\[.*?\]\]/g, '');
+          cleaned = cleaned.replace(/<\|[^>]*\|>/g, '');
+          cleaned = cleaned.replace(/[\d.#\s\-–—_\/\\\(\)\[\]\*=\+,|]/g, '');
+          cleaned = cleaned.replace(/^[\s]*text[\s]*$/gim, '');
+          const hasMeaningfulChar = /[a-zA-Z\u4e00-\u9fa5]/.test(cleaned);
+          if (!cleaned.trim() || !hasMeaningfulChar) {
+            console.log('DeepSeek 检测到空白图片或无效乱码，清空结果');
+            rawText = '';
+          }
+        }
+
+        // 原有的通用清洗逻辑（所有模型均适用，包括 DeepSeek）
         rawText = rawText.replace(/^.*<\|ref\|>.*<\/\|ref\|>.*$/gm, '');
         rawText = rawText.replace(/^.*<\|det\|>.*<\/\|det\|>.*$/gm, '');
         rawText = rawText.replace(/<\|?LOC[^>]*\|?>/g, '');
@@ -262,28 +295,6 @@ export default async function handler(req, res) {
         rawText = rawText.replace(/<\|det\|>/g, '').replace(/<\/\|det\|>/g, '');
         rawText = rawText.replace(/\n{3,}/g, '\n\n');
 
-        // ----- DeepSeek-OCR 空白图片乱码过滤 -----
-        if (apiName === 'deepseek-ai/DeepSeek-OCR') {
-          console.log('DeepSeek rawText (after full clean):', rawText.substring(0, 200));
-
-          // 1. 移除所有坐标标记 [[...]] 和 <|...|> 标签
-          let cleaned = rawText.replace(/\[\[.*?\]\]/g, '');
-          cleaned = cleaned.replace(/<\|[^>]*\|>/g, '');
-
-          // 2. 移除所有数字、点号、井号、空格、减号、斜杠、方括号、竖线、等号、星号等符号
-          cleaned = cleaned.replace(/[\d.#\s\-–—_\/\\\(\)\[\]\*=\+,|]+/g, '');
-
-          // 3. 移除常见无意义英文占位符（如 "text"），不区分大小写
-          cleaned = cleaned.replace(/text/gi, '');
-
-          // 4. 检查剩余内容中是否包含至少一个字母或中文
-          const hasMeaningfulChar = /[a-zA-Z\u4e00-\u9fa5]/.test(cleaned);
-
-          if (!cleaned.trim() || !hasMeaningfulChar) {
-            console.log('DeepSeek 检测到空白图片或无效乱码，清空结果');
-            rawText = '';   // 置空，触发系统统一提示
-          }
-        }
         recognizedText = rawText.trim();
       }
     } else {
