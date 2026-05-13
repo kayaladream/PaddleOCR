@@ -49,15 +49,13 @@
   to { opacity: 1; transform: scale(1); }
 }
 
-/* ===== 全局底层设置 ===== */
 body {
   background: linear-gradient(135deg, #F5F8FA 0%, #FFFFFF 100%);
   min-height: 100vh;
   position: relative;
   overflow-x: hidden;
-  zoom: 0.93; /* 满足你的要求，全局版面等比缩小至93% */
+  zoom: 0.92; 
   
-  /* 核心修复1：全站禁止意外选中，营造原生App体验 */
   user-select: none;
   -webkit-user-select: none;
 }
@@ -78,7 +76,6 @@ body::before {
   animation: backgroundShift 15s ease-in-out infinite alternate;
 }
 
-/* 为需要复制/编辑的核心区域单独开放选中权限 */
 .edit-content-editable,
 .gradient-text,
 .result-header,
@@ -219,7 +216,6 @@ header p {
   font-size: 1.1rem;
 }
 
-/* ===== 结果面板容器 ===== */
 .result-container {
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
@@ -252,7 +248,6 @@ header p {
   padding: 2rem 0;
 }
 
-/* ===== 核心防溢出区域 ===== */
 .result-text {
   line-height: 1.6;
   color: #1d1d1f;
@@ -265,7 +260,7 @@ header p {
   flex-direction: column;
   flex: 1;
   min-height: 0; 
-  min-width: 0; /* 核心修复2：阻止子元素过宽撑破父级 */
+  min-width: 0;
 }
 
 .result-text .result-header {
@@ -317,7 +312,6 @@ header p {
   line-height: 1.8;
 }
 
-/* ===== 流式识别面板（防滚动条闪烁） ===== */
 .gradient-text {
   color: #1d1d1f;
   position: relative;
@@ -327,10 +321,10 @@ header p {
   box-sizing: border-box;
   flex: 1;
   min-height: 0;
-  min-width: 0; /* 核心修复2：防止横向滚动条闪动 */
+  min-width: 0;
   overflow-y: auto;
-  overflow-x: hidden; /* 彻底屏蔽横向溢出 */
-  word-break: break-word; /* 长单词强制折行 */
+  overflow-x: hidden;
+  word-break: break-word;
   padding-right: 5px;
 }
 
@@ -797,15 +791,14 @@ main.has-content {
   }
 }
 
-/* ===== 文字编辑输入框（已消除横向滚动条闪烁） ===== */
 .edit-content-editable {
   width: 100%;
   flex: 1;
   min-height: 0;
-  min-width: 0; /* 核心修复2：防止横向滚动条闪动 */
+  min-width: 0;
   overflow-y: auto;
-  overflow-x: hidden; /* 彻底屏蔽横向溢出 */
-  word-break: break-word; /* 长单词强制折行 */
+  overflow-x: hidden;
+  word-break: break-word;
   font-size: 1.13rem;
   font-family: "微软雅黑", serif;
   line-height: 1.5;
@@ -942,7 +935,6 @@ main.has-content {
   }
 }
 
-/* === 重试提示呼吸光环 === */
 .breathe-ring {
   display: inline-block;
   width: 1em;
@@ -956,7 +948,6 @@ main.has-content {
 }
 @keyframes breatheRing { 0%, 100% { transform: scale(0.8); opacity: 0.4; } 50% { transform: scale(1.3); opacity: 1; } }
 
-/* ===== 仅针对电脑端生效的强制等高魔法代码 ===== */
 @media (min-width: 993px) {
   main.has-content { align-items: stretch; }
   .result-section { align-self: stretch; position: relative; }
