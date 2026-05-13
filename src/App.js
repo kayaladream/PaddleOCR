@@ -667,7 +667,7 @@ function App() {
     ? `（${resultModels[currentIndex].channel === 'baidu' ? '百度' : '硅基流动'} · ${resultModels[currentIndex].name}）`
     : '';
   const currentIsStreaming = streamingStatus[currentIndex] || false;
-  const showResultsSection = results.some(r => r && r !== '') || Object.values(streamingStatus).some(v => v);
+  const showResultsSection = isLoading || results.some(r => r && r !== '') || Object.values(streamingStatus).some(v => v);
 
   const getCurrentImageStatus = () => {
     if (streamingStatus[currentIndex]) return { text: '识别中', className: 'status-streaming' };
@@ -790,42 +790,54 @@ function App() {
         </div>
         {showResultsSection && (
           <div className="result-section">
-            <div className="result-container">
-              {isLoading && !currentIsStreaming && results[currentIndex] == null && <div className="loading result-loading">等待识别...</div>}
-              {currentIsStreaming && (
-                <div className="result-text">
-                  <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...) {modelInfoText}</span></div>
-                  <div className="gradient-text">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkMath]}
-                      rehypePlugins={[rehypeKatex, rehypeRaw]}
-                      components={{
-                        table: ({node, ...props}) => (<div style={{overflowX:'auto', maxWidth:'100%'}}><table className="markdown-table" {...props} /></div>),
-                        th: ({node, ...props}) => <th className="markdown-th" {...props} />,
-                        td: ({node, ...props}) => <td className="markdown-td" {...props} />,
-                      }}
-                    >
-                      {results[currentIndex] || ''}
-                    </ReactMarkdown>
+            {/* 加载中且无结果时：只显示纯文字，不带背景容器 */}
+            {isLoading && !currentIsStreaming && results[currentIndex] == null ? (
+              <div className="loading result-loading" style={{
+                background: 'none',
+                border: 'none',
+                boxShadow: 'none',
+                padding: '2rem 0',
+                textAlign: 'center'
+              }}>
+                等待识别...
+              </div>
+            ) : (
+              <div className="result-container">
+                {currentIsStreaming && (
+                  <div className="result-text">
+                    <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...) {modelInfoText}</span></div>
+                    <div className="gradient-text">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkMath]}
+                        rehypePlugins={[rehypeKatex, rehypeRaw]}
+                        components={{
+                          table: ({node, ...props}) => (<div style={{overflowX:'auto', maxWidth:'100%'}}><table className="markdown-table" {...props} /></div>),
+                          th: ({node, ...props}) => <th className="markdown-th" {...props} />,
+                          td: ({node, ...props}) => <td className="markdown-td" {...props} />,
+                        }}
+                      >
+                        {results[currentIndex] || ''}
+                      </ReactMarkdown>
+                    </div>
                   </div>
-                </div>
-              )}
-              {!currentIsStreaming && results[currentIndex] != null && (
-                <div className="result-text editing-area">
-                  <div className="result-header">
-                    <span>编辑第 {currentIndex + 1} 张图片的结果 {modelInfoText}</span>
-                    <button className="copy-button" onClick={handleCopyText}>复制内容</button>
+                )}
+                {!currentIsStreaming && results[currentIndex] != null && (
+                  <div className="result-text editing-area">
+                    <div className="result-header">
+                      <span>编辑第 {currentIndex + 1} 张图片的结果 {modelInfoText}</span>
+                      <button className="copy-button" onClick={handleCopyText}>复制内容</button>
+                    </div>
+                    <div ref={editDivRef} contentEditable={true} className="edit-content-editable" onInput={handleInput} onCopy={handleManualCopy}
+                         suppressContentEditableWarning={true} aria-label={`编辑识别结果 ${currentIndex + 1}`} spellCheck="false" />
                   </div>
-                  <div ref={editDivRef} contentEditable={true} className="edit-content-editable" onInput={handleInput} onCopy={handleManualCopy}
-                       suppressContentEditableWarning={true} aria-label={`编辑识别结果 ${currentIndex + 1}`} spellCheck="false" />
-                </div>
-              )}
-              {!isLoading && !currentIsStreaming && results[currentIndex] == null && images.length > 0 && (
-                <div className="result-placeholder">
-                  <span style={{fontWeight:'bold'}}>⚠️ 系统提示</span><br /><br />当前图片状态异常，暂无识别结果或由于网络中断导致失败，请尝试重新点击上传。
-                </div>
-              )}
-            </div>
+                )}
+                {!isLoading && !currentIsStreaming && results[currentIndex] == null && images.length > 0 && (
+                  <div className="result-placeholder">
+                    <span style={{fontWeight:'bold'}}>⚠️ 系统提示</span><br /><br />当前图片状态异常，暂无识别结果或由于网络中断导致失败，请尝试重新点击上传。
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </main>
