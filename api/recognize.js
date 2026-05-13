@@ -257,6 +257,14 @@ export default async function handler(req, res) {
         rawText = rawText.replace(/<\|ref\|>/g, '').replace(/<\/\|ref\|>/g, '');
         rawText = rawText.replace(/<\|det\|>/g, '').replace(/<\/\|det\|>/g, '');
         rawText = rawText.replace(/\n{3,}/g, '\n\n');
+          // --- 新增：DeepSeek-OCR 空白图片乱码过滤 ---
+          if (apiName === 'deepseek-ai/DeepSeek-OCR') {
+            // 移除所有数字、点号、井号、空白后，如果剩余内容为空或极短，视为无效
+            const stripped = rawText.replace(/[\d.#\s-]/g, '');
+            if (!stripped || stripped.length < 3) {
+              rawText = '';  // 置空，触发后续“未检测到可识别文本”提示
+            }
+          }
         recognizedText = rawText.trim();
       }
     } else {
