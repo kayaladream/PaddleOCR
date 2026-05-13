@@ -213,7 +213,6 @@ header p {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(23, 50, 224, 0.1);
   transition: none;
-  /* 修改：使内部可弹性布局并撑满高度 */
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -485,7 +484,6 @@ main {
   align-items: center;
 }
 
-/* 修改：左右分栏时强制两列等高 */
 main.has-content {
   flex-direction: row;
   align-items: stretch;
@@ -504,7 +502,6 @@ main.has-content {
   max-width: 600px;
 }
 
-/* 修改：结果区域不再固定高度，改为弹性布局撑满 */
 .result-section {
   flex: 1;
   min-width: 0;
@@ -513,9 +510,10 @@ main.has-content {
   opacity: 0;
   animation: fadeIn 0.5s ease-out forwards;
   animation-delay: 0.2s;
+  min-height: 0;
+  overflow: hidden;
 }
 
-/* 移动端回退为纵向排列 */
 @media (max-width: 992px) {
   main.has-content {
     flex-direction: column;
@@ -624,7 +622,6 @@ main.has-content {
   width: 100%;
 }
 
-/* ========== 导航栏修正版：左箭头+页码+右箭头居中，进度条靠右 ========== */
 .image-navigation {
   display: flex;
   align-items: center;
@@ -635,7 +632,6 @@ main.has-content {
   width: 100%;
 }
 
-/* 进度指示器：绝对定位在右侧，垂直居中 */
 .progress-indicator {
   position: absolute;
   right: 0;
@@ -651,7 +647,6 @@ main.has-content {
   line-height: 1.4;
 }
 
-/* 页码样式 */
 .image-counter {
   font-size: 0.9rem;
   color: #86868b;
@@ -660,7 +655,6 @@ main.has-content {
   white-space: nowrap;
 }
 
-/* 左右箭头按钮样式 */
 .nav-button {
   background: rgb(23, 50, 224);
   color: white;
@@ -687,7 +681,6 @@ main.has-content {
   background: #2A4CF0;
 }
 
-/* 图片状态角标 */
 .image-status-badge {
   position: absolute;
   top: 12px;
@@ -721,7 +714,6 @@ main.has-content {
   100% { opacity: 0.7; }
 }
 
-/* 移动端适配 */
 @media (max-width: 768px) {
   .image-navigation {
     gap: 0.5rem;
@@ -747,12 +739,11 @@ main.has-content {
   }
 }
 
-/* 编辑内容可编辑区域样式 – 关键修改：自适应高度 */
 .edit-content-editable {
   width: 100%;
   flex: 1;
-  min-height: 150px;          /* 最小高度，防止空白时过小 */
-  max-height: none;           /* 去掉之前的高度上限 */
+  min-height: 150px;
+  max-height: none;
   overflow-y: auto;
   font-size: 1.13rem;
   font-family: "微软雅黑", serif;
@@ -1154,7 +1145,6 @@ main.has-content {
   pointer-events: none;
 }
 
-/* === 重试提示呼吸光环 === */
 .breathe-ring {
   display: inline-block;
   width: 1em;
