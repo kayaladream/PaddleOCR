@@ -1,3 +1,9 @@
+/* ================================================
+   PaddleOCR 前端样式 - 完整版
+   修复：右侧标题栏固定，仅编辑区域可滚动
+   特点：右侧与左侧图片等高，阴影不裁切
+   ================================================ */
+
 @keyframes gradientMove {
   0% { background-position: 0% 50%; }
   100% { background-position: 300% 50%; }
@@ -204,6 +210,7 @@ header p {
   font-size: 1.1rem;
 }
 
+/* ========== 右侧结果容器（标题固定，编辑区滚动） ========== */
 .result-container {
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
@@ -215,8 +222,8 @@ header p {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow-y: auto;
-  transition: none;
+  /* fix: 容器本身不滚动，让滚动交给子元素 */
+  overflow: visible;
   box-sizing: border-box;
 }
 
@@ -236,6 +243,11 @@ header p {
   line-height: 1.6;
   color: #1d1d1f;
   width: 100%;
+  /* fix: 让 result-text 内部也弹性，方便编辑区撑开 */
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;                 /* 防止弹性溢出 */
   padding: 0 0 1rem 0;
   transition: none;
 }
@@ -250,6 +262,8 @@ header p {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+  /* fix: 标题不参与滚动，固定 */
+  flex-shrink: 0;
 }
 
 .result-text table,
@@ -478,6 +492,7 @@ header p {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
+/* ========== 主容器：有内容时改为相对定位，准备绝对定位右侧 ========== */
 main {
   transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
@@ -490,6 +505,7 @@ main.has-content {
   display: block;
 }
 
+/* ========== 左侧上传区域 ========== */
 .upload-section {
   width: 100%;
   max-width: 600px;
@@ -503,6 +519,7 @@ main.has-content {
   margin-right: 52%;
 }
 
+/* ========== 右侧结果区域（绝对定位，高度 = 左侧高度） ========== */
 .result-section {
   position: absolute;
   top: 0;
@@ -514,8 +531,10 @@ main.has-content {
   opacity: 0;
   animation: fadeIn 0.5s ease-out forwards;
   animation-delay: 0.2s;
+  /* 不设 overflow: hidden，保持阴影可见 */
 }
 
+/* ========== 移动端恢复为纵向布局 ========== */
 @media (max-width: 992px) {
   main.has-content {
     display: flex;
@@ -539,20 +558,24 @@ main.has-content {
   }
 }
 
-/* 滚动条美化 */
-.result-container::-webkit-scrollbar {
+/* 滚动条美化（依然作用于编辑区滚动条） */
+.result-container::-webkit-scrollbar,
+.edit-content-editable::-webkit-scrollbar {
   width: 8px;
 }
-.result-container::-webkit-scrollbar-track {
+.result-container::-webkit-scrollbar-track,
+.edit-content-editable::-webkit-scrollbar-track {
   background: #f1f1f1;
   border-radius: 4px;
 }
-.result-container::-webkit-scrollbar-thumb {
+.result-container::-webkit-scrollbar-thumb,
+.edit-content-editable::-webkit-scrollbar-thumb {
   background: rgb(23, 50, 224);
   border-radius: 4px;
   transition: all 0.3s ease;
 }
-.result-container::-webkit-scrollbar-thumb:hover {
+.result-container::-webkit-scrollbar-thumb:hover,
+.edit-content-editable::-webkit-scrollbar-thumb:hover {
   background: #2A4CF0;
 }
 
@@ -632,6 +655,7 @@ main.has-content {
   width: 100%;
 }
 
+/* ========== 导航栏修正版：左箭头+页码+右箭头居中，进度条靠右 ========== */
 .image-navigation {
   display: flex;
   align-items: center;
@@ -691,6 +715,7 @@ main.has-content {
   background: #2A4CF0;
 }
 
+/* 图片状态角标 */
 .image-status-badge {
   position: absolute;
   top: 12px;
@@ -732,12 +757,13 @@ main.has-content {
   .image-status-badge { top: 8px; right: 8px; padding: 2px 8px; font-size: 0.65rem; }
 }
 
+/* ========== 编辑框（自适应高度，独立滚动） ========== */
 .edit-content-editable {
   width: 100%;
   flex: 1;
   min-height: 150px;
   max-height: none;
-  overflow-y: auto;
+  overflow-y: auto;               /* fix: 编辑区自己滚动，标题不受影响 */
   font-size: 1.13rem;
   font-family: "微软雅黑", serif;
   line-height: 1.5;
@@ -1138,6 +1164,7 @@ main.has-content {
   pointer-events: none;
 }
 
+/* 重试提示呼吸光环 */
 .breathe-ring {
   display: inline-block;
   width: 1em;
