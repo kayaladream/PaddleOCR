@@ -791,6 +791,7 @@ function App() {
         {showResultsSection && (
           <div className="result-section">
             <div className="result-container">
+              {isLoading && !currentIsStreaming && results[currentIndex] == null && <div className="loading result-loading">等待识别...</div>}
               {currentIsStreaming && (
                 <div className="result-text">
                   <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...) {modelInfoText}</span></div>
