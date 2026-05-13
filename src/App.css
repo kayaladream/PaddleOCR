@@ -1,6 +1,6 @@
 /* ================================================
    PaddleOCR 前端样式 - 最终完整版
-   修复：流式输出文字不跑出框外
+   修复滚动条光标和横向滚动条过大问题
    ================================================ */
 
 @keyframes gradientMove {
@@ -244,7 +244,7 @@ header p {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 0;              /* 关键：允许内部滚动 */
+  min-height: 0;
   padding: 0 0 1rem 0;
   transition: none;
   overflow: hidden;           /* 防止未限制的溢出 */
@@ -260,7 +260,7 @@ header p {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  flex-shrink: 0;            /* 标题固定 */
+  flex-shrink: 0;
 }
 
 .result-text table,
@@ -300,14 +300,14 @@ header p {
   line-height: 1.8;
 }
 
-/* ========== 流式输出时滚动区域（gradient-text） ========== */
+/* ========== 流式输出时滚动区域 ========== */
 .gradient-text {
   color: #1d1d1f;
   position: relative;
   min-height: 50px;
   font-size: 1.1rem;
   font-family: "微软雅黑", serif;
-  overflow-y: auto;          /* 修复：打字机效果不溢出 */
+  overflow-y: auto;          /* 打字机效果不溢出 */
   flex: 1;
   min-height: 0;
 }
@@ -558,18 +558,21 @@ main.has-content {
   }
 }
 
-/* 滚动条美化 */
+/* ========== 滚动条美化（修复：同时定义垂直和水平尺寸） ========== */
 .result-container::-webkit-scrollbar,
 .edit-content-editable::-webkit-scrollbar,
 .gradient-text::-webkit-scrollbar {
-  width: 8px;
+  width: 8px;                /* 垂直滚动条宽度 */
+  height: 8px;               /* 水平滚动条高度 */
 }
+
 .result-container::-webkit-scrollbar-track,
 .edit-content-editable::-webkit-scrollbar-track,
 .gradient-text::-webkit-scrollbar-track {
   background: #f1f1f1;
   border-radius: 4px;
 }
+
 .result-container::-webkit-scrollbar-thumb,
 .edit-content-editable::-webkit-scrollbar-thumb,
 .gradient-text::-webkit-scrollbar-thumb {
@@ -577,10 +580,18 @@ main.has-content {
   border-radius: 4px;
   transition: all 0.3s ease;
 }
+
 .result-container::-webkit-scrollbar-thumb:hover,
 .edit-content-editable::-webkit-scrollbar-thumb:hover,
 .gradient-text::-webkit-scrollbar-thumb:hover {
   background: #2A4CF0;
+}
+
+/* 让滚动条角落也保持统一 */
+.result-container::-webkit-scrollbar-corner,
+.edit-content-editable::-webkit-scrollbar-corner,
+.gradient-text::-webkit-scrollbar-corner {
+  background: #f1f1f1;
 }
 
 .url-button {
@@ -665,7 +676,7 @@ main.has-content {
   align-items: center;
   justify-content: center;
   gap: 1rem;
-  margin-top: 0.6rem;
+  margin-top: 0.5rem;
   margin-bottom: 1rem;
   position: relative;
   width: 100%;
@@ -762,13 +773,14 @@ main.has-content {
   .image-status-badge { top: 8px; right: 8px; padding: 2px 8px; font-size: 0.65rem; }
 }
 
-/* ========== 编辑框（标题固定，编辑区独自滚动） ========== */
+/* ========== 编辑框（标题固定，编辑区独自滚动，光标修复） ========== */
 .edit-content-editable {
   width: 100%;
   flex: 1;
   min-height: 150px;
   max-height: none;
-  overflow-y: auto;
+  overflow-y: auto;           /* 垂直滚动 */
+  overflow-x: auto;           /* 水平方向也允许滚动，但不会莫名变大 */
   font-size: 1.13rem;
   font-family: "微软雅黑", serif;
   line-height: 1.5;
@@ -779,7 +791,7 @@ main.has-content {
   margin-top: 1rem;
   background-color: #f8f9fa;
   color: #212529;
-  cursor: text;
+  /* 移除 cursor: text; 让浏览器自动处理，滚动条上变为箭头 */
   white-space: pre-wrap;
   word-wrap: break-word;
   outline: none;
