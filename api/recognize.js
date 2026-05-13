@@ -251,23 +251,30 @@ export default async function handler(req, res) {
 
       if (rawText) {
         rawText = parseOtslToHtml(rawText);
+
+        // 强力移除所有 <|...|> 格式的标签（如 <|ref|>、<|det|>）
+        rawText = rawText.replace(/<\|[^>]*\|>/g, '');
+        // 原有的清洗逻辑（保留）
         rawText = rawText.replace(/^.*<\|ref\|>.*<\/\|ref\|>.*$/gm, '');
         rawText = rawText.replace(/^.*<\|det\|>.*<\/\|det\|>.*$/gm, '');
         rawText = rawText.replace(/<\|?LOC[^>]*\|?>/g, '');
         rawText = rawText.replace(/<\|ref\|>/g, '').replace(/<\/\|ref\|>/g, '');
         rawText = rawText.replace(/<\|det\|>/g, '').replace(/<\/\|det\|>/g, '');
         rawText = rawText.replace(/\n{3,}/g, '\n\n');
+
         // ----- DeepSeek-OCR 空白图片乱码过滤 -----
         if (apiName === 'deepseek-ai/DeepSeek-OCR') {
-          // 临时日志：查看清洗后的文本内容，部署后可去 Vercel Logs 中查看
-          console.log('DeepSeek rawText (after clean):', rawText.substring(0, 200));
+          // 临时日志（可在 Vercel Logs 中查看效果）
+          console.log('DeepSeek rawText (after full clean):', rawText.substring(0, 200));
 
-          // 去除所有数字、点号、井号、空格、换行、减号等无意义字符
-          const stripped = rawText.replace(/[\d.#\s\-–—]/g, '');
-          // 如果剩余内容为空，或者长度小于 3，就认为是空白图片产生的乱码
-          if (!stripped || stripped.length < 3) {
-            console.log('DeepSeek 检测到空白图片，清空结果');
-            rawText = '';
+          // 移除所有数字、点号、井号、空格、减号、斜杠、尖括号、方括号、竖线、等号、星号等无意义符号
+          const stripped = rawText.replace(/[\d.#\s\-–—_\/\\<>\|\[\]\*=\+]+/g, '');
+          // 检查剩余内容中是否包含至少一个字母或中文
+          const hasMeaningfulChar = /[a-zA-Z\u4e00-\u9fa5]/.test(stripped);
+
+          if (!stripped || stripped.length < 3 || !hasMeaningfulChar) {
+            console.log('DeepSeek 检测到空白图片或无效乱码，清空结果');
+            rawText = '';   // 置空，触发系统统一提示
           }
         }
         recognizedText = rawText.trim();
