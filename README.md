@@ -27,7 +27,7 @@
 <div align="center">
   <img width="1166" height="819" alt="手写稿识别" src="https://github.com/user-attachments/assets/5ea98001-2454-45b5-b956-5e573bbe64dd" />
   <br>
-  <small>手写稿与复杂排版识别</small>
+  <small>手写稿识别</small>
 </div>
 <br>
 <div align="center">
