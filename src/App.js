@@ -799,7 +799,7 @@ function App() {
                 padding: '2rem 0',
                 textAlign: 'center'
               }}>
-                等待识别...
+                <span className="breathe-ring"></span> 等待识别...
               </div>
             ) : (
               <div className="result-container">
