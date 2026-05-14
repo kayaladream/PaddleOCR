@@ -110,65 +110,122 @@ export default async function handler(req, res) {
       return res.json({ routerResult: routerLabel });
     }
 
-    // ============================================
-    // 渠道一：Aistudio Baidu
+// ============================================
+    // 渠道一：Aistudio Baidu (最新异步接口)
     // ============================================
     if (channel === 'baidu') {
-      let host;
-      if (modelId === 'baidu-vl-1.5') {
-        host = process.env.PADDLE_OCR_HOST_VL;
-      } else if (modelId === 'baidu-ocrv5') {
-        host = process.env.PADDLE_OCR_HOST_OCR;
-      } else if (modelId === 'baidu-structurev3') {
-        host = process.env.PADDLE_OCR_HOST_STRUCTURE;
-      } else {
-        host = process.env.PADDLE_OCR_HOST_VL;
+      if (!process.env.PADDLE_TOKEN) {
+        throw new Error('环境变量未设置：请配置 PADDLE_TOKEN');
       }
 
-      if (!host) {
-        throw new Error(`环境变量未设置：请配置 ${modelId === 'baidu-ocrv5' ? 'PADDLE_OCR_HOST_OCR' : modelId === 'baidu-structurev3' ? 'PADDLE_OCR_HOST_STRUCTURE' : 'PADDLE_OCR_HOST_VL'} 以及 PADDLE_TOKEN`);
-      }
-
-      let url = '';
-      let payload = { file: imageData, fileType: 1 };
+      const JOB_URL = 'https://paddleocr.aistudio-app.com/api/v2/ocr/jobs';
+      
+      let actualModelName = 'PaddleOCR-VL-1.5';
+      let optionalPayload = {};
 
       if (modelId === 'baidu-vl-1.5') {
-        url = `${host}/layout-parsing`;
-        payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
+        actualModelName = 'PaddleOCR-VL-1.5';
+        optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
       } else if (modelId === 'baidu-ocrv5') {
-        url = `${host}/ocr`;
-        payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useTextlineOrientation: false };
+        actualModelName = 'PP-OCRv5';
+        optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useTextlineOrientation: false };
       } else if (modelId === 'baidu-structurev3') {
-        url = `${host}/layout-parsing`;
-        payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useTextlineOrientation: false, useChartRecognition: false };
+        actualModelName = 'PP-StructureV3';
+        optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
       } else {
-        url = `${host}/layout-parsing`;
-        payload = { ...payload, useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
+        actualModelName = 'PaddleOCR-VL-1.5';
+        optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
       }
 
-      const response = await fetch(url, {
+      // 1. 将 base64 转为 Blob 用于 FormData 文件上传
+      const buffer = Buffer.from(imageData, 'base64');
+      const blob = new Blob([buffer], { type: mimeType || 'image/jpeg' });
+      const ext = mimeType?.split('/')[1] || 'jpg';
+
+      const formData = new FormData();
+      formData.append('model', actualModelName);
+      formData.append('optionalPayload', JSON.stringify(optionalPayload));
+      formData.append('file', blob, `image.${ext}`); // 必须指定文件名让后端识别
+
+      // 2. 提交任务
+      const jobResponse = await fetch(JOB_URL, {
         method: 'POST',
         headers: {
-          'Authorization': `token ${process.env.PADDLE_TOKEN}`,
-          'Content-Type': 'application/json',
+          'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
+          // 注意：不要手动设置 Content-Type，fetch会自动处理包含 boundary 的 multipart/form-data 头
         },
-        body: JSON.stringify(payload),
+        body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error(`百度 PaddleOCR 返回状态码 ${response.status}`);
+      if (!jobResponse.ok) {
+        const errText = await jobResponse.text();
+        throw new Error(`百度任务提交失败，状态码 ${jobResponse.status}: ${errText}`);
       }
 
-      const data = await response.json();
+      const jobData = await jobResponse.json();
+      const jobId = jobData?.data?.jobId;
+      if (!jobId) {
+        throw new Error('百度接口未返回 jobId，请检查账号 Token 或服务状态');
+      }
 
-      if (modelId === 'baidu-ocrv5') {
-        // 修正：提取 rec_texts 数组并拼接
-        recognizedText = data?.result?.ocrResults
-          ?.flatMap(res => res.prunedResult?.rec_texts || [])
-          .filter(Boolean)
-          .join('\n') || '';
+      // 3. 轮询结果 (每次等待3秒，最多尝试40次约等于120秒，匹配前端超时)
+      let jsonlUrl = '';
+      const maxRetries = 40; 
+      let attempts = 0;
+
+      while (attempts < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        attempts++;
+
+        const pollResponse = await fetch(`${JOB_URL}/${jobId}`, {
+          headers: {
+            'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
+          }
+        });
+
+        // 容忍偶发的网络抖动
+        if (!pollResponse.ok) continue;
+
+        const pollData = await pollResponse.json();
+        const state = pollData?.data?.state;
+
+        if (state === 'done') {
+          jsonlUrl = pollData?.data?.resultUrl?.jsonUrl;
+          break;
+        } else if (state === 'failed') {
+          throw new Error(`百度 OCR 任务执行失败: ${pollData?.data?.errorMsg}`);
+        }
+      }
+
+      if (!jsonlUrl) {
+        throw new Error('轮询超时，未能获取百度识别结果');
+      }
+
+      // 4. 下载并解析 JSONL 结果文件
+      const jsonlResponse = await fetch(jsonlUrl);
+      if (!jsonlResponse.ok) {
+        throw new Error(`获取结果文件失败，状态码 ${jsonlResponse.status}`);
+      }
+      
+      const jsonlText = await jsonlResponse.text();
+      const lines = jsonlText.trim().split('\n').filter(Boolean);
+      
+      // 因为每次发单张图，所以提取第一行即可
+      if (lines.length > 0) {
+        const resultObj = JSON.parse(lines[0])?.result || {};
+        
+        if (modelId === 'baidu-ocrv5') {
+          // 延续你原来提取纯文本的逻辑
+          recognizedText = resultObj?.ocrResults
+            ?.flatMap(res => res.prunedResult?.rec_texts || [])
+            .filter(Boolean)
+            .join('\n') || '';
+        } else {
+          // 提取 Markdown 格式的逻辑
+          recognizedText = resultObj?.layoutParsingResults?.[0]?.markdown?.text || '';
+        }
       } else {
-        recognizedText = data?.result?.layoutParsingResults?.[0]?.markdown?.text || '';
+        recognizedText = '';
       }
     }
 
