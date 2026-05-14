@@ -73,7 +73,7 @@ https://kayala.nyc.mn
 ### 方式二：本地开发部署
 ### 1. 克隆仓库
 ```bash
-git clone https://github.com/你的用户名/PaddleOCR-Reader.git
+git clone https://github.com/kayaladream/PaddleOCR-Reader.git
 cd PaddleOCR-Reader
 ```
 
