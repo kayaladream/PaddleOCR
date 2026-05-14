@@ -361,7 +361,7 @@ function App() {
 
             setResults(prev => {
               const updated = [...prev];
-              updated[index] = `>  **${reason}，将在 10 秒后自动重试（${attempt}/${maxRetries}）**\n>\n> <span class="breathe-ring"></span> **正在重试中...**`;
+              updated[index] = `>  **${reason}，将在 10 秒后自动重试（${attempt}/${maxRetries}）**\n>\n> <span class="breathe-ring" style="width:0.9em;height:0.9em;border-width:0.12em;vertical-align:middle;margin-right:0.15em;"></span> **正在重试中...**`;
               return updated;
             });
           }
