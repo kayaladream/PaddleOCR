@@ -804,8 +804,8 @@ function App() {
                 gap: '0.4em'
               }}>
                 <span className="breathe-ring" style={{
-                  width: '0.65em',
-                  height: '0.65em',
+                  width: '0.75em',
+                  height: '0.75em',
                   borderWidth: '0.12em'
                 }}></span> 等待识别...
               </div>
