@@ -797,9 +797,17 @@ function App() {
                 border: 'none',
                 boxShadow: 'none',
                 padding: '2rem 0',
-                textAlign: 'center'
+                textAlign: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4em'
               }}>
-                <span className="breathe-ring"></span> 等待识别...
+                <span className="breathe-ring" style={{
+                  width: '0.65em',
+                  height: '0.65em',
+                  borderWidth: '0.12em'
+                }}></span> 等待识别...
               </div>
             ) : (
               <div className="result-container">
