@@ -73,8 +73,8 @@ https://kayala.nyc.mn
 ### 方式二：本地开发部署
 ### 1. 克隆仓库
 ```bash
-git clone https://github.com/kayaladream/PaddleOCR-Reader.git
-cd PaddleOCR-Reader
+git clone https://github.com/kayaladream/PaddleOCR.git
+cd PaddleOCR
 ```
 
 ### 2.安装依赖
