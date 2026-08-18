@@ -82,7 +82,7 @@ export default async function handler(req, res) {
     const {
       imageData,
       mimeType,
-      modelId = 'baidu-vl-1.5',
+      modelId = 'baidu-vl-1.6',
       channel = 'baidu',
       apiName,
       classifyOnly = false
@@ -126,7 +126,7 @@ export default async function handler(req, res) {
       if (modelId === 'baidu-vl-1.6') {
         actualModelName = 'PaddleOCR-VL-1.6';
         optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
-      } else if (modelId === 'baidu-ocrv5') {
+      } else if (modelId === 'baidu-ocr') {
         actualModelName = 'PP-OCRv6';
         optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useTextlineOrientation: false };
       } else if (modelId === 'baidu-structurev3') {
@@ -214,7 +214,7 @@ export default async function handler(req, res) {
       if (lines.length > 0) {
         const resultObj = JSON.parse(lines[0])?.result || {};
         
-        if (modelId === 'baidu-ocrv5') {
+        if (modelId === 'baidu-ocrv6') {
           // 延续你原来提取纯文本的逻辑
           recognizedText = resultObj?.ocrResults
             ?.flatMap(res => res.prunedResult?.rec_texts || [])
