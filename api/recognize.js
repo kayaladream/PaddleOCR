@@ -96,7 +96,7 @@ export default async function handler(req, res) {
     let routerLabel = null;
 
     // 仅分类模式
-    if (classifyOnly && channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
+    if (classifyOnly && channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.6') {
       const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
       if (dynamicPrompt === 'ERROR:') {
         routerLabel = '路由分类服务异常，使用默认OCR';
@@ -120,20 +120,20 @@ export default async function handler(req, res) {
 
       const JOB_URL = 'https://paddleocr.aistudio-app.com/api/v2/ocr/jobs';
       
-      let actualModelName = 'PaddleOCR-VL-1.5';
+      let actualModelName = 'PaddleOCR-VL-1.6';
       let optionalPayload = {};
 
-      if (modelId === 'baidu-vl-1.5') {
-        actualModelName = 'PaddleOCR-VL-1.5';
+      if (modelId === 'baidu-vl-1.6') {
+        actualModelName = 'PaddleOCR-VL-1.6';
         optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
       } else if (modelId === 'baidu-ocrv5') {
-        actualModelName = 'PP-OCRv5';
+        actualModelName = 'PP-OCRv6';
         optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useTextlineOrientation: false };
       } else if (modelId === 'baidu-structurev3') {
         actualModelName = 'PP-StructureV3';
         optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
       } else {
-        actualModelName = 'PaddleOCR-VL-1.5';
+        actualModelName = 'PaddleOCR-VL-1.6';
         optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
       }
 
@@ -244,7 +244,7 @@ export default async function handler(req, res) {
           frequency_penalty: 0.0,
           presence_penalty: 0.0,
         };
-      } else if (apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
+      } else if (apiName === 'PaddlePaddle/PaddleOCR-VL-1.6') {
         const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
 
         if (dynamicPrompt === 'ERROR:') {
@@ -363,7 +363,7 @@ export default async function handler(req, res) {
     }
 
     const responsePayload = { text: recognizedText };
-    if (channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.5' && routerLabel) {
+    if (channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.6' && routerLabel) {
       responsePayload.routerResult = routerLabel;
     }
     res.json(responsePayload);
