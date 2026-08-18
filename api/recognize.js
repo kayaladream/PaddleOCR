@@ -110,109 +110,125 @@ export default async function handler(req, res) {
       return res.json({ routerResult: routerLabel });
     }
 
-    // ============================================
-    // 渠道一：Aistudio Baidu (V2 异步 API)
-    // ============================================
-    if (channel === 'baidu') {
-      const token = process.env.PADDLE_TOKEN;
-      if (!token) {
-        throw new Error('环境变量未设置：请配置 PADDLE_TOKEN');
-      }
+// ============================================
+// 渠道一：Aistudio Baidu (V2 异步 API)
+// ============================================
+if (channel === 'baidu') {
+  const token = process.env.PADDLE_TOKEN;
+  if (!token) {
+    throw new Error('环境变量未设置：请配置 PADDLE_TOKEN');
+  }
 
-      // 模型名称映射（新版 API 的模型名）
-      const modelNameMap = {
-        'baidu-vl-1.5': 'PaddleOCR-VL-1.6',
-        'baidu-ocrv5': 'PP-OCRv6',
-        'baidu-structurev3': 'PP-StructureV3'
-      };
-      const model = modelNameMap[modelId] || 'PaddleOCR-VL-1.6'; // 默认
+  // 模型名称映射（新版 API 的模型名）
+  const modelNameMap = {
+    'baidu-vl-1.5': 'PaddleOCR-VL-1.6',
+    'baidu-ocrv5': 'PP-OCRv6',
+    'baidu-structurev3': 'PP-StructureV3'
+  };
+  const model = modelNameMap[modelId] || 'PaddleOCR-VL-1.6';
 
-      // 构建可选参数（根据模型不同）
-      const optionalPayload = {
-        useDocOrientationClassify: false,
-        useDocUnwarping: false,
-        useChartRecognition: false,
-      };
-      if (model === 'PP-OCRv6') {
-        // PP-OCRv6 不使用 useChartRecognition，使用 useTextlineOrientation
-        delete optionalPayload.useChartRecognition;
-        optionalPayload.useTextlineOrientation = false;
-      }
+  // 构建可选参数（根据模型不同）
+  const optionalPayload = {};
+  // 先尝试空对象，如果后续需要可再添加
 
-      // 辅助函数：轮询任务状态
-      async function pollJobResult(jobId, maxAttempts = 60, pollInterval = 2000) {
-        const statusUrl = `https://paddleocr.aistudio-app.com/api/v2/ocr/jobs/${jobId}`;
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-          const res = await fetch(statusUrl, {
-            headers: { 'Authorization': `bearer ${token}` }
-          });
-          if (!res.ok) {
-            throw new Error(`轮询状态失败 (${res.status}): ${await res.text()}`);
-          }
-          const data = await res.json();
-          const state = data.data.state;
-          if (state === 'done') {
-            return data.data.resultUrl.jsonUrl;
-          } else if (state === 'failed') {
-            throw new Error(`任务失败: ${data.data.errorMsg || '未知错误'}`);
-          }
-          // pending 或 running 继续等待
-          await new Promise(r => setTimeout(r, pollInterval));
-        }
-        throw new Error('轮询超时，请稍后重试');
-      }
+  // 1. 提交任务（使用 Buffer）
+  const submitUrl = 'https://paddleocr.aistudio-app.com/api/v2/ocr/jobs';
+  const formData = new FormData();
+  const buffer = Buffer.from(imageData, 'base64');
+  // 直接 append buffer，并指定文件名和 Content-Type
+  formData.append('file', buffer, { filename: 'upload.jpg', contentType: mimeType });
+  formData.append('model', model);
+  if (Object.keys(optionalPayload).length > 0) {
+    formData.append('optionalPayload', JSON.stringify(optionalPayload));
+  }
 
-      // 1. 提交任务（使用 FormData）
-      const submitUrl = 'https://paddleocr.aistudio-app.com/api/v2/ocr/jobs';
-      const formData = new FormData();
-      // 将 base64 图片转为 Buffer（Node 环境）
-      const buffer = Buffer.from(imageData, 'base64');
-      const blob = new Blob([buffer], { type: mimeType });
-      formData.append('file', blob, 'upload.jpg');
-      formData.append('model', model);
-      formData.append('optionalPayload', JSON.stringify(optionalPayload));
+  const submitRes = await fetch(submitUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `bearer ${token}`,
+    },
+    body: formData,
+  });
 
-      const submitRes = await fetch(submitUrl, {
-        method: 'POST',
-        headers: { 'Authorization': `bearer ${token}` },
-        body: formData
-      });
-      if (!submitRes.ok) {
-        const errText = await submitRes.text();
-        throw new Error(`提交任务失败 (${submitRes.status}): ${errText}`);
-      }
-      const submitData = await submitRes.json();
-      const jobId = submitData.data.jobId;
+  const submitText = await submitRes.text();
+  let submitData;
+  try {
+    submitData = JSON.parse(submitText);
+  } catch {
+    throw new Error(`提交任务返回非JSON: ${submitText}`);
+  }
 
-      // 2. 轮询结果
-      const jsonlUrl = await pollJobResult(jobId);
+  if (!submitRes.ok) {
+    throw new Error(`提交任务失败 (${submitRes.status}): ${submitData?.message || submitText}`);
+  }
 
-      // 3. 下载 JSONL 结果
-      const resultRes = await fetch(jsonlUrl);
-      if (!resultRes.ok) throw new Error(`获取结果失败: ${resultRes.status}`);
-      const resultText = await resultRes.text();
+  const jobId = submitData?.data?.jobId;
+  if (!jobId) {
+    throw new Error(`未获取到 jobId: ${JSON.stringify(submitData)}`);
+  }
 
-      // 4. 解析 JSONL 并提取文本
-      const lines = resultText.split('\n').filter(line => line.trim() !== '');
-      let allText = '';
-      for (const line of lines) {
-        const entry = JSON.parse(line);
-        const result = entry.result;
-        if (model === 'PP-OCRv6') {
-          // ocrResults 结构：每个元素有 prunedResult.rec_texts
-          const ocrResults = result.ocrResults || [];
-          const texts = ocrResults.flatMap(r => r.prunedResult?.rec_texts || []);
-          allText += texts.join('\n') + '\n';
-        } else {
-          // layoutParsingResults
-          const layoutResults = result.layoutParsingResults || [];
-          for (const resItem of layoutResults) {
-            allText += (resItem.markdown?.text || '') + '\n';
-          }
-        }
-      }
-      recognizedText = allText.trim();
+  // 2. 轮询结果
+  const maxAttempts = 120; // 4分钟
+  const pollInterval = 2000;
+  let jsonlUrl = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const statusRes = await fetch(`https://paddleocr.aistudio-app.com/api/v2/ocr/jobs/${jobId}`, {
+      headers: { 'Authorization': `bearer ${token}` }
+    });
+    const statusText = await statusRes.text();
+    let statusData;
+    try {
+      statusData = JSON.parse(statusText);
+    } catch {
+      throw new Error(`轮询返回非JSON: ${statusText}`);
     }
+    if (!statusRes.ok) {
+      throw new Error(`轮询状态失败 (${statusRes.status}): ${statusData?.message || statusText}`);
+    }
+    const state = statusData?.data?.state;
+    if (state === 'done') {
+      jsonlUrl = statusData?.data?.resultUrl?.jsonUrl;
+      if (!jsonlUrl) {
+        throw new Error(`任务完成但未返回 jsonUrl: ${JSON.stringify(statusData)}`);
+      }
+      break;
+    } else if (state === 'failed') {
+      const errorMsg = statusData?.data?.errorMsg || '未知错误';
+      throw new Error(`任务失败: ${errorMsg}`);
+    }
+    // pending 或 running 继续等待
+    await new Promise(r => setTimeout(r, pollInterval));
+  }
+  if (!jsonlUrl) {
+    throw new Error('轮询超时，未获取到结果');
+  }
+
+  // 3. 下载 JSONL 结果
+  const resultRes = await fetch(jsonlUrl);
+  if (!resultRes.ok) {
+    throw new Error(`获取结果失败 (${resultRes.status}): ${await resultRes.text()}`);
+  }
+  const resultText = await resultRes.text();
+
+  // 4. 解析 JSONL 并提取文本
+  const lines = resultText.split('\n').filter(line => line.trim() !== '');
+  let allText = '';
+  for (const line of lines) {
+    const entry = JSON.parse(line);
+    const result = entry.result;
+    if (model === 'PP-OCRv6') {
+      const ocrResults = result?.ocrResults || [];
+      const texts = ocrResults.flatMap(r => r?.prunedResult?.rec_texts || []);
+      allText += texts.join('\n') + '\n';
+    } else {
+      const layoutResults = result?.layoutParsingResults || [];
+      for (const resItem of layoutResults) {
+        allText += (resItem?.markdown?.text || '') + '\n';
+      }
+    }
+  }
+  recognizedText = allText.trim();
+}
 
     // ============================================
     // 渠道二：硅基流动 (SiliconFlow)
