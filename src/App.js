@@ -12,15 +12,15 @@ import './App.css';
 // ====== 模型列表定义 ======
 const MODELS = [
   {
-    id: 'baidu-vl-1.6',  // 已更新
-    name: 'PaddleOCR-VL-1.6', // 已更新
+    id: 'baidu-vl-1.6',
+    name: 'PaddleOCR-VL-1.6',
     badge: 'pp.png',
     desc: '突破扭曲倾斜，多模态行业SOTA',
     channel: 'baidu'
   },
   {
-    id: 'baidu-ocrv6',   // 已更新
-    name: 'PP-OCRv6',    // 已更新
+    id: 'baidu-ocrv6',
+    name: 'PP-OCRv6',
     badge: 'pp.png',
     desc: '超轻量文字识别，又快又准',
     channel: 'baidu'
@@ -293,12 +293,11 @@ function App() {
 
       const imageData = await fileToBase64(file);
 
-      // ===== 提前分类请求（仅 PaddleOCR-VL-1.5）—— 静默重试3次，5秒超时，失败时显示错误标签 =====
+      // ===== 提前分类请求（仅 PaddleOCR-VL-1.5） =====
       if (selectedModel.channel === 'silicon' && selectedModel.apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
         const classifyWithRetry = async () => {
           for (let attempt = 1; attempt <= 3; attempt++) {
             try {
-              // 使用带超时的 fetch，5 秒后强制中断
               const res = await fetchWithTimeout('/api/recognize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -309,67 +308,42 @@ function App() {
                   apiName: 'PaddlePaddle/PaddleOCR-VL-1.5',
                   classifyOnly: true,
                 }),
-              }, 5000); // 5秒超时
+              }, 5000); 
               if (res.ok) {
                 const data = await res.json();
                 if (data.routerResult) {
-                  setRouterResults(prev => {
-                    const u = [...prev];
-                    u[index] = data.routerResult;
-                    return u;
-                  });
+                  setRouterResults(prev => { const u = [...prev]; u[index] = data.routerResult; return u; });
                 }
-                return; // 成功，停止重试
+                return;
               }
-              // 如果后端返回非 2xx，继续重试
             } catch (err) {
-              console.error(`分类请求重试 ${attempt}/3 网络/其他错误`, err.message);
+              console.error(`分类请求重试 ${attempt}/3`, err.message);
             }
-            if (attempt < 3) {
-              await new Promise(r => setTimeout(r, 500));
-            }
+            if (attempt < 3) await new Promise(r => setTimeout(r, 500));
           }
-          // 3次全部失败，显示错误标签
-          setRouterResults(prev => {
-            const u = [...prev];
-            u[index] = '路由分类服务异常，使用默认OCR';
-            return u;
-          });
+          setRouterResults(prev => { const u = [...prev]; u[index] = '路由分类服务异常，使用默认OCR'; return u; });
         };
-        classifyWithRetry(); // 不 await，与识别请求并发
+        classifyWithRetry();
       }
 
-      // ===== 正式识别请求（所有模型统一重试3次，30秒超时） =====
-      let response;
+      // ===== 正式识别请求（加入前端智能轮询机制） =====
+      let finalData = null;
       let lastError = null;
       const maxRetries = 3;
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           if (attempt > 1) {
-            let reason = '服务请求异常';
-            const msg = lastError?.message || '';
-            if (msg.includes('fetch') || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-              reason = '网络连接异常';
-            } else if (msg.includes('状态码') || msg.includes('status') || msg.includes('503') || msg.includes('502') || msg.includes('504')) {
-              reason = '模型服务暂时不可用';
-            } else if (msg.includes('超时') || msg.includes('timeout')) {
-              reason = '请求超时';
-            } else if (msg.includes('环境变量')) {
-              reason = '服务配置错误';
-            }
-
             setResults(prev => {
               const updated = [...prev];
-              updated[index] = `>  **${reason}，将在 10 秒后自动重试（${attempt}/${maxRetries}）**\n>\n> <span class="breathe-ring"></span> **正在重试中...**`;
+              updated[index] = `> **请求异常，将在几秒后自动重试（${attempt}/${maxRetries}）**\n>\n> <span class="breathe-ring"></span>`;
               return updated;
             });
+            await new Promise(r => setTimeout(r, 3000));
           }
-          let timeoutMs = 90000; // 硅基流动默认 90 秒
-          if (selectedModel.channel === 'baidu') {
-              timeoutMs = 120000; // 百度官方 120 秒
-          }
-          response = await fetchWithTimeout('/api/recognize', {
+
+          // 1. 发送图片，只为了换取一个任务 ID (针对百度) 或者直接出结果 (针对硅基)
+          const response = await fetchWithTimeout('/api/recognize', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -379,34 +353,73 @@ function App() {
               channel: selectedModel.channel,
               apiName: selectedModel.apiName
             }),
-          }, timeoutMs);
+          }, 30000); // 拿 ID 用不了几秒
 
           if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: '请求失败' }));
-            throw new Error(errorData.error || '服务异常');
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || '请求服务异常');
           }
 
-          break;
+          const initData = await response.json();
+
+          // 2. 如果后端发回了 jobId，说明是百度的新版异步接口，前端需要开启轮询
+          if (initData.jobId) {
+            let jobDone = false;
+            let pollAttempts = 0;
+            const MAX_POLLS = 40; // 最多等两分钟 (40 * 3s)
+
+            while (!jobDone && pollAttempts < MAX_POLLS) {
+              // 每次查询间隔 3 秒
+              await new Promise(r => setTimeout(r, 3000));
+              pollAttempts++;
+
+              // 更新前端界面的占位进度提示
+              setResults(prev => {
+                const updated = [...prev];
+                updated[index] = `> **百度模型深度解析中... 已耗时约 ${pollAttempts * 3} 秒**\n>\n> <span class="breathe-ring"></span>`;
+                return updated;
+              });
+
+              const pollRes = await fetchWithTimeout('/api/recognize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  pollJobId: initData.jobId,
+                  channel: selectedModel.channel,
+                  modelId: selectedModel.id
+                })
+              }, 10000); // 仅查询状态，短超时即可
+
+              if (!pollRes.ok) continue; // 网络波动则忽略，进入下次轮询
+
+              const pollData = await pollRes.json();
+              if (pollData.status === 'done') {
+                finalData = pollData; // 拿到包含文本的数据
+                jobDone = true;
+              } else if (pollData.status === 'failed') {
+                throw new Error(pollData.error || '百度官方服务器解析图片出错');
+              }
+              // 如果是 'pending' 或 'running' 则默默进行下一次 while 循环
+            }
+            if (!jobDone) throw new Error('任务轮询超时，未能成功拉取结果');
+          } else {
+             // 硅基流动或直接出结果的，直接赋值
+             finalData = initData;
+          }
+
+          break; // 如果没报错抛出异常，走到这里说明成功，跳出 Retry 循环
         } catch (err) {
           if (err.name === 'AbortError') {
             lastError = new Error('请求超时，请检查网络连接');
           } else {
             lastError = err;
           }
-          if (attempt < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 10000));
-          } else {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
         }
       }
 
-      if (!response || !response.ok) {
-        throw lastError || new Error('请求失败');
-      }
+      if (!finalData) throw lastError || new Error('识别请求彻底失败');
 
-      const data = await response.json();
-      const finalText = preprocessText(data.text || '');
+      const finalText = preprocessText(finalData.text || '');
 
       setResultModels(prev => {
         const updated = [...prev];
@@ -414,17 +427,14 @@ function App() {
         return updated;
       });
 
-      // 如果识别响应也带有路由标签（例如提前分类请求失败但识别请求包含了结果），则更新
-      if (data.routerResult) {
+      // 提取路由信息
+      if (finalData.routerResult) {
         setRouterResults(prev => {
           const u = [...prev];
           const current = u[index];
           const normalTypes = ['表格', '公式', '纯文本'];
-          // 如果当前已经是正常类别，且新值不是正常类别，则不覆盖，保留正确结果
-          if (current && normalTypes.includes(current) && !normalTypes.includes(data.routerResult)) {
-            return u;
-          }
-          u[index] = data.routerResult;
+          if (current && normalTypes.includes(current) && !normalTypes.includes(finalData.routerResult)) return u;
+          u[index] = finalData.routerResult;
           return u;
         });
       }
