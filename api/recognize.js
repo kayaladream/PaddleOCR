@@ -82,7 +82,7 @@ export default async function handler(req, res) {
     const {
       imageData,
       mimeType,
-      modelId = 'baidu-vl-1.6',
+      modelId = 'baidu-vl-1.5',
       channel = 'baidu',
       apiName,
       classifyOnly = false
@@ -96,7 +96,7 @@ export default async function handler(req, res) {
     let routerLabel = null;
 
     // 仅分类模式
-    if (classifyOnly && channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.6') {
+    if (classifyOnly && channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
       const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
       if (dynamicPrompt === 'ERROR:') {
         routerLabel = '路由分类服务异常，使用默认OCR';
@@ -110,123 +110,108 @@ export default async function handler(req, res) {
       return res.json({ routerResult: routerLabel });
     }
 
-// ============================================
-    // 渠道一：Aistudio Baidu (最新异步接口)
+    // ============================================
+    // 渠道一：Aistudio Baidu (V2 异步 API)
     // ============================================
     if (channel === 'baidu') {
-      if (!process.env.PADDLE_TOKEN) {
+      const token = process.env.PADDLE_TOKEN;
+      if (!token) {
         throw new Error('环境变量未设置：请配置 PADDLE_TOKEN');
       }
 
-      const JOB_URL = 'https://paddleocr.aistudio-app.com/api/v2/ocr/jobs';
-      
-      let actualModelName = 'PaddleOCR-VL-1.6';
-      let optionalPayload = {};
+      // 模型名称映射（新版 API 的模型名）
+      const modelNameMap = {
+        'baidu-vl-1.5': 'PaddleOCR-VL-1.6',
+        'baidu-ocrv5': 'PP-OCRv6',
+        'baidu-structurev3': 'PP-StructureV3'
+      };
+      const model = modelNameMap[modelId] || 'PaddleOCR-VL-1.6'; // 默认
 
-      if (modelId === 'baidu-vl-1.6') {
-        actualModelName = 'PaddleOCR-VL-1.6';
-        optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
-      } else if (modelId === 'baidu-ocr') {
-        actualModelName = 'PP-OCRv6';
-        optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useTextlineOrientation: false };
-      } else if (modelId === 'baidu-structurev3') {
-        actualModelName = 'PP-StructureV3';
-        optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
-      } else {
-        actualModelName = 'PaddleOCR-VL-1.6';
-        optionalPayload = { useDocOrientationClassify: false, useDocUnwarping: false, useChartRecognition: false };
+      // 构建可选参数（根据模型不同）
+      const optionalPayload = {
+        useDocOrientationClassify: false,
+        useDocUnwarping: false,
+        useChartRecognition: false,
+      };
+      if (model === 'PP-OCRv6') {
+        // PP-OCRv6 不使用 useChartRecognition，使用 useTextlineOrientation
+        delete optionalPayload.useChartRecognition;
+        optionalPayload.useTextlineOrientation = false;
       }
 
-      // 1. 将 base64 转为 Blob 用于 FormData 文件上传
-      const buffer = Buffer.from(imageData, 'base64');
-      const blob = new Blob([buffer], { type: mimeType || 'image/jpeg' });
-      const ext = mimeType?.split('/')[1] || 'jpg';
-
-      const formData = new FormData();
-      formData.append('model', actualModelName);
-      formData.append('optionalPayload', JSON.stringify(optionalPayload));
-      formData.append('file', blob, `image.${ext}`); // 必须指定文件名让后端识别
-
-      // 2. 提交任务
-      const jobResponse = await fetch(JOB_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
-          // 注意：不要手动设置 Content-Type，fetch会自动处理包含 boundary 的 multipart/form-data 头
-        },
-        body: formData,
-      });
-
-      if (!jobResponse.ok) {
-        const errText = await jobResponse.text();
-        throw new Error(`百度任务提交失败，状态码 ${jobResponse.status}: ${errText}`);
-      }
-
-      const jobData = await jobResponse.json();
-      const jobId = jobData?.data?.jobId;
-      if (!jobId) {
-        throw new Error('百度接口未返回 jobId，请检查账号 Token 或服务状态');
-      }
-
-      // 3. 轮询结果 (每次等待3秒，最多尝试40次约等于120秒，匹配前端超时)
-      let jsonlUrl = '';
-      const maxRetries = 40; 
-      let attempts = 0;
-
-      while (attempts < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        attempts++;
-
-        const pollResponse = await fetch(`${JOB_URL}/${jobId}`, {
-          headers: {
-            'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
+      // 辅助函数：轮询任务状态
+      async function pollJobResult(jobId, maxAttempts = 60, pollInterval = 2000) {
+        const statusUrl = `https://paddleocr.aistudio-app.com/api/v2/ocr/jobs/${jobId}`;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const res = await fetch(statusUrl, {
+            headers: { 'Authorization': `bearer ${token}` }
+          });
+          if (!res.ok) {
+            throw new Error(`轮询状态失败 (${res.status}): ${await res.text()}`);
           }
-        });
-
-        // 容忍偶发的网络抖动
-        if (!pollResponse.ok) continue;
-
-        const pollData = await pollResponse.json();
-        const state = pollData?.data?.state;
-
-        if (state === 'done') {
-          jsonlUrl = pollData?.data?.resultUrl?.jsonUrl;
-          break;
-        } else if (state === 'failed') {
-          throw new Error(`百度 OCR 任务执行失败: ${pollData?.data?.errorMsg}`);
+          const data = await res.json();
+          const state = data.data.state;
+          if (state === 'done') {
+            return data.data.resultUrl.jsonUrl;
+          } else if (state === 'failed') {
+            throw new Error(`任务失败: ${data.data.errorMsg || '未知错误'}`);
+          }
+          // pending 或 running 继续等待
+          await new Promise(r => setTimeout(r, pollInterval));
         }
+        throw new Error('轮询超时，请稍后重试');
       }
 
-      if (!jsonlUrl) {
-        throw new Error('轮询超时，未能获取百度识别结果');
-      }
+      // 1. 提交任务（使用 FormData）
+      const submitUrl = 'https://paddleocr.aistudio-app.com/api/v2/ocr/jobs';
+      const formData = new FormData();
+      // 将 base64 图片转为 Buffer（Node 环境）
+      const buffer = Buffer.from(imageData, 'base64');
+      const blob = new Blob([buffer], { type: mimeType });
+      formData.append('file', blob, 'upload.jpg');
+      formData.append('model', model);
+      formData.append('optionalPayload', JSON.stringify(optionalPayload));
 
-      // 4. 下载并解析 JSONL 结果文件
-      const jsonlResponse = await fetch(jsonlUrl);
-      if (!jsonlResponse.ok) {
-        throw new Error(`获取结果文件失败，状态码 ${jsonlResponse.status}`);
+      const submitRes = await fetch(submitUrl, {
+        method: 'POST',
+        headers: { 'Authorization': `bearer ${token}` },
+        body: formData
+      });
+      if (!submitRes.ok) {
+        const errText = await submitRes.text();
+        throw new Error(`提交任务失败 (${submitRes.status}): ${errText}`);
       }
-      
-      const jsonlText = await jsonlResponse.text();
-      const lines = jsonlText.trim().split('\n').filter(Boolean);
-      
-      // 因为每次发单张图，所以提取第一行即可
-      if (lines.length > 0) {
-        const resultObj = JSON.parse(lines[0])?.result || {};
-        
-        if (modelId === 'baidu-ocrv6') {
-          // 延续你原来提取纯文本的逻辑
-          recognizedText = resultObj?.ocrResults
-            ?.flatMap(res => res.prunedResult?.rec_texts || [])
-            .filter(Boolean)
-            .join('\n') || '';
+      const submitData = await submitRes.json();
+      const jobId = submitData.data.jobId;
+
+      // 2. 轮询结果
+      const jsonlUrl = await pollJobResult(jobId);
+
+      // 3. 下载 JSONL 结果
+      const resultRes = await fetch(jsonlUrl);
+      if (!resultRes.ok) throw new Error(`获取结果失败: ${resultRes.status}`);
+      const resultText = await resultRes.text();
+
+      // 4. 解析 JSONL 并提取文本
+      const lines = resultText.split('\n').filter(line => line.trim() !== '');
+      let allText = '';
+      for (const line of lines) {
+        const entry = JSON.parse(line);
+        const result = entry.result;
+        if (model === 'PP-OCRv6') {
+          // ocrResults 结构：每个元素有 prunedResult.rec_texts
+          const ocrResults = result.ocrResults || [];
+          const texts = ocrResults.flatMap(r => r.prunedResult?.rec_texts || []);
+          allText += texts.join('\n') + '\n';
         } else {
-          // 提取 Markdown 格式的逻辑
-          recognizedText = resultObj?.layoutParsingResults?.[0]?.markdown?.text || '';
+          // layoutParsingResults
+          const layoutResults = result.layoutParsingResults || [];
+          for (const resItem of layoutResults) {
+            allText += (resItem.markdown?.text || '') + '\n';
+          }
         }
-      } else {
-        recognizedText = '';
       }
+      recognizedText = allText.trim();
     }
 
     // ============================================
@@ -244,7 +229,7 @@ export default async function handler(req, res) {
           frequency_penalty: 0.0,
           presence_penalty: 0.0,
         };
-      } else if (apiName === 'PaddlePaddle/PaddleOCR-VL-1.6') {
+      } else if (apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
         const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
 
         if (dynamicPrompt === 'ERROR:') {
@@ -308,50 +293,12 @@ export default async function handler(req, res) {
 
       if (rawText) {
         rawText = parseOtslToHtml(rawText);
-
-        // ===== DeepSeek-OCR 专有后处理：智能清洗 + 空白检测 =====
-        if (apiName === 'deepseek-ai/DeepSeek-OCR') {
-          console.log('DeepSeek rawText (after parse):', rawText.substring(0, 200));
-
-          // 1. 判断是否存在典型的空白/乱码特征（大量重复数字点号）
-          const looksLikeNoise = /(\d\.){5,}\d/.test(rawText) ||
-                                 /^[\d.#\s]+$/.test(rawText.trim());
-
-          // 2. 只有存在乱码特征时，才清理孤立的 "text" 噪声
-          if (looksLikeNoise) {
-            // 删除单独成行的 "text"（大小写不限）
-            rawText = rawText.replace(/^\s*text\s*$/gim, '');
-            // 删除被空白包围的独立 "text" 单词
-            rawText = rawText.replace(/\btext\b/gi, (match, offset, str) => {
-              const before = offset === 0 ? '' : str[offset - 1];
-              const after = offset + match.length >= str.length ? '' : str[offset + match.length];
-              return (/[\s\n]/.test(before) && /[\s\n]/.test(after)) ? '' : match;
-            });
-          }
-
-          // 3. 压缩多余空行
-          rawText = rawText.replace(/\n{3,}/g, '\n\n');
-
-          // 4. 空白图片检测（即使没有乱码特征，也可能完全为空）
-          let cleaned = rawText.replace(/\[\[.*?\]\]/g, '');
-          cleaned = cleaned.replace(/<\|[^>]*\|>/g, '');
-          cleaned = cleaned.replace(/[\d.#\s\-–—_\/\\\(\)\[\]\*=\+,|]/g, '');
-          cleaned = cleaned.replace(/^[\s]*text[\s]*$/gim, '');
-          const hasMeaningfulChar = /[a-zA-Z\u4e00-\u9fa5]/.test(cleaned);
-          if (!cleaned.trim() || !hasMeaningfulChar) {
-            console.log('DeepSeek 检测到空白图片或无效乱码，清空结果');
-            rawText = '';
-          }
-        }
-
-        // 原有的通用清洗逻辑（所有模型均适用，包括 DeepSeek）
         rawText = rawText.replace(/^.*<\|ref\|>.*<\/\|ref\|>.*$/gm, '');
         rawText = rawText.replace(/^.*<\|det\|>.*<\/\|det\|>.*$/gm, '');
         rawText = rawText.replace(/<\|?LOC[^>]*\|?>/g, '');
         rawText = rawText.replace(/<\|ref\|>/g, '').replace(/<\/\|ref\|>/g, '');
         rawText = rawText.replace(/<\|det\|>/g, '').replace(/<\/\|det\|>/g, '');
         rawText = rawText.replace(/\n{3,}/g, '\n\n');
-
         recognizedText = rawText.trim();
       }
     } else {
@@ -363,7 +310,7 @@ export default async function handler(req, res) {
     }
 
     const responsePayload = { text: recognizedText };
-    if (channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.6' && routerLabel) {
+    if (channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.5' && routerLabel) {
       responsePayload.routerResult = routerLabel;
     }
     res.json(responsePayload);
