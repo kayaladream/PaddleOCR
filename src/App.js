@@ -12,33 +12,33 @@ import './App.css';
 // ====== 模型列表定义 ======
 const MODELS = [
   {
-    id: 'baidu-vl-1.6',
-    name: 'PaddleOCR-VL-1.6',
+    id: 'baidu-vl-1.5',
+    name: 'PaddleOCR-VL-1.6',          // 更新为最新模型名
     badge: 'pp.png',
     desc: '突破扭曲倾斜，多模态行业SOTA',
     channel: 'baidu'
   },
   {
-    id: 'baidu-ocrv6',
-    name: 'PP-OCRv6',
+    id: 'baidu-ocrv5',
+    name: 'PP-OCRv6',                  // 更新为最新模型名
     badge: 'pp.png',
     desc: '超轻量文字识别，又快又准',
     channel: 'baidu'
   },
   {
     id: 'baidu-structurev3',
-    name: 'PP-StructureV3',
+    name: 'PP-StructureV3',            // 更新为最新模型名
     badge: 'pp.png',
     desc: '通用文档解析，高精度零幻觉',
     channel: 'baidu'
   },
   {
-    id: 'sili-vl-1.6',
-    name: 'PaddleOCR-VL-1.6',
+    id: 'sili-vl-1.5',
+    name: 'PaddleOCR-VL-1.5',
     badge: 'silicon.png',
     desc: '硅基流动版，识别能力较百度官方弱，轻量备用',
     channel: 'silicon',
-    apiName: 'PaddlePaddle/PaddleOCR-VL-1.6'
+    apiName: 'PaddlePaddle/PaddleOCR-VL-1.5'
   },
   {
     id: 'sili-deepseek',
@@ -293,8 +293,8 @@ function App() {
 
       const imageData = await fileToBase64(file);
 
-      // ===== 提前分类请求（仅 PaddleOCR-VL-1.6）—— 静默重试3次，5秒超时，失败时显示错误标签 =====
-      if (selectedModel.channel === 'silicon' && selectedModel.apiName === 'PaddlePaddle/PaddleOCR-VL-1.6') {
+      // ===== 提前分类请求（仅 PaddleOCR-VL-1.5）—— 静默重试3次，5秒超时，失败时显示错误标签 =====
+      if (selectedModel.channel === 'silicon' && selectedModel.apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
         const classifyWithRetry = async () => {
           for (let attempt = 1; attempt <= 3; attempt++) {
             try {
@@ -306,7 +306,7 @@ function App() {
                   imageData,
                   mimeType: file.type,
                   channel: 'silicon',
-                  apiName: 'PaddlePaddle/PaddleOCR-VL-1.6',
+                  apiName: 'PaddlePaddle/PaddleOCR-VL-1.5',
                   classifyOnly: true,
                 }),
               }, 5000); // 5秒超时
@@ -361,7 +361,7 @@ function App() {
 
             setResults(prev => {
               const updated = [...prev];
-              updated[index] = `>  **${reason}，将在 10 秒后自动重试（${attempt}/${maxRetries}）**\n>\n> <span style="display:inline-flex;align-items:center;gap:0.25em;padding-left:0.2em;"><span class="breathe-ring" style="width:0.9em;height:0.9em;border-width:0.12em;margin:0;vertical-align:unset;"></span><strong>正在重试中...</strong></span>`;
+              updated[index] = `>  **${reason}，将在 10 秒后自动重试（${attempt}/${maxRetries}）**\n>\n> <span class="breathe-ring"></span> **正在重试中...**`;
               return updated;
             });
           }
@@ -667,7 +667,7 @@ function App() {
     ? `（${resultModels[currentIndex].channel === 'baidu' ? '百度' : '硅基流动'} · ${resultModels[currentIndex].name}）`
     : '';
   const currentIsStreaming = streamingStatus[currentIndex] || false;
-  const showResultsSection = isLoading || results.some(r => r && r !== '') || Object.values(streamingStatus).some(v => v);
+  const showResultsSection = images.length > 0 || isLoading || Object.values(streamingStatus).some(v => v);
 
   const getCurrentImageStatus = () => {
     if (streamingStatus[currentIndex]) return { text: '识别中', className: 'status-streaming' };
@@ -790,62 +790,42 @@ function App() {
         </div>
         {showResultsSection && (
           <div className="result-section">
-            {/* 加载中且无结果时：只显示纯文字，不带背景容器 */}
-            {isLoading && !currentIsStreaming && results[currentIndex] == null ? (
-              <div className="loading result-loading" style={{
-                background: 'none',
-                border: 'none',
-                boxShadow: 'none',
-                padding: '2rem 0',
-                textAlign: 'center',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.4em'
-              }}>
-                <span className="breathe-ring" style={{
-                  width: '0.75em',
-                  height: '0.75em',
-                  borderWidth: '0.12em'
-                }}></span> 等待识别...
-              </div>
-            ) : (
-              <div className="result-container">
-                {currentIsStreaming && (
-                  <div className="result-text">
-                    <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...) {modelInfoText}</span></div>
-                    <div className="gradient-text">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkMath]}
-                        rehypePlugins={[rehypeKatex, rehypeRaw]}
-                        components={{
-                          table: ({node, ...props}) => (<div style={{overflowX:'auto', maxWidth:'100%'}}><table className="markdown-table" {...props} /></div>),
-                          th: ({node, ...props}) => <th className="markdown-th" {...props} />,
-                          td: ({node, ...props}) => <td className="markdown-td" {...props} />,
-                        }}
-                      >
-                        {results[currentIndex] || ''}
-                      </ReactMarkdown>
-                    </div>
+            <div className="result-container">
+              {isLoading && !currentIsStreaming && results[currentIndex] == null && <div className="loading result-loading">等待识别...</div>}
+              {currentIsStreaming && (
+                <div className="result-text">
+                  <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...) {modelInfoText}</span></div>
+                  <div className="gradient-text">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkMath]}
+                      rehypePlugins={[rehypeKatex, rehypeRaw]}
+                      components={{
+                        table: ({node, ...props}) => (<div style={{overflowX:'auto', maxWidth:'100%'}}><table className="markdown-table" {...props} /></div>),
+                        th: ({node, ...props}) => <th className="markdown-th" {...props} />,
+                        td: ({node, ...props}) => <td className="markdown-td" {...props} />,
+                      }}
+                    >
+                      {results[currentIndex] || ''}
+                    </ReactMarkdown>
                   </div>
-                )}
-                {!currentIsStreaming && results[currentIndex] != null && (
-                  <div className="result-text editing-area">
-                    <div className="result-header">
-                      <span>编辑第 {currentIndex + 1} 张图片的结果 {modelInfoText}</span>
-                      <button className="copy-button" onClick={handleCopyText}>复制内容</button>
-                    </div>
-                    <div ref={editDivRef} contentEditable={true} className="edit-content-editable" onInput={handleInput} onCopy={handleManualCopy}
-                         suppressContentEditableWarning={true} aria-label={`编辑识别结果 ${currentIndex + 1}`} spellCheck="false" />
+                </div>
+              )}
+              {!currentIsStreaming && results[currentIndex] != null && (
+                <div className="result-text editing-area">
+                  <div className="result-header">
+                    <span>编辑第 {currentIndex + 1} 张图片的结果 {modelInfoText}</span>
+                    <button className="copy-button" onClick={handleCopyText}>复制内容</button>
                   </div>
-                )}
-                {!isLoading && !currentIsStreaming && results[currentIndex] == null && images.length > 0 && (
-                  <div className="result-placeholder">
-                    <span style={{fontWeight:'bold'}}>⚠️ 系统提示</span><br /><br />当前图片状态异常，暂无识别结果或由于网络中断导致失败，请尝试重新点击上传。
-                  </div>
-                )}
-              </div>
-            )}
+                  <div ref={editDivRef} contentEditable={true} className="edit-content-editable" onInput={handleInput} onCopy={handleManualCopy}
+                       suppressContentEditableWarning={true} aria-label={`编辑识别结果 ${currentIndex + 1}`} spellCheck="false" />
+                </div>
+              )}
+              {!isLoading && !currentIsStreaming && results[currentIndex] == null && images.length > 0 && (
+                <div className="result-placeholder">
+                  <span style={{fontWeight:'bold'}}>⚠️ 系统提示</span><br /><br />当前图片状态异常，暂无识别结果或由于网络中断导致失败，请尝试重新点击上传。
+                </div>
+              )}
+            </div>
           </div>
         )}
       </main>
