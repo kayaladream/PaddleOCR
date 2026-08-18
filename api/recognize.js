@@ -1,9 +1,10 @@
 // api/recognize.js
+export const maxDuration = 330; // 防止 Vercel 免费版过早超时断开
+
 function parseOtslToHtml(text) {
   if (!text.includes('<nl>') && !text.includes('<fcel>')) {
     return text;
   }
-
   try {
     let html = '<table class="markdown-table" style="border-collapse: collapse;" border="1"><tbody>\n';
     const rows = text.split('<nl>').filter(r => r.trim() !== '');
@@ -58,14 +59,11 @@ async function autoDetectPrompt(imageData, mimeType, token) {
     const reply = data?.choices?.[0]?.message?.content?.trim().toUpperCase() || 'A';
 
     if (reply.includes('B')) {
-      console.log('🖼️ 路由器检测为：表格 -> 使用 Table Recognition:');
       return 'Table Recognition:';
     }
     if (reply.includes('C')) {
-      console.log('🖼️ 路由器检测为：公式 -> 使用 Formula Recognition:');
       return 'Formula Recognition:';
     }
-    console.log('🖼️ 路由器检测为：纯文本 -> 使用 OCR:');
     return 'OCR:';
   } catch (error) {
     console.error('路由分类请求出错:', error);
@@ -82,7 +80,7 @@ export default async function handler(req, res) {
     const {
       imageData,
       mimeType,
-      modelId = 'baidu-vl-1.5',
+      modelId = 'baidu-vl-1.6',
       channel = 'baidu',
       apiName,
       classifyOnly = false
@@ -95,7 +93,7 @@ export default async function handler(req, res) {
     let recognizedText = '';
     let routerLabel = null;
 
-    // 仅分类模式
+    // 仅分类模式 (硅基流动使用)
     if (classifyOnly && channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
       const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
       if (dynamicPrompt === 'ERROR:') {
@@ -110,125 +108,124 @@ export default async function handler(req, res) {
       return res.json({ routerResult: routerLabel });
     }
 
-// ============================================
-// 渠道一：Aistudio Baidu (V2 异步 API)
-// ============================================
-if (channel === 'baidu') {
-  const token = process.env.PADDLE_TOKEN;
-  if (!token) {
-    throw new Error('环境变量未设置：请配置 PADDLE_TOKEN');
-  }
-
-  // 模型名称映射（新版 API 的模型名）
-  const modelNameMap = {
-    'baidu-vl-1.5': 'PaddleOCR-VL-1.6',
-    'baidu-ocrv5': 'PP-OCRv6',
-    'baidu-structurev3': 'PP-StructureV3'
-  };
-  const model = modelNameMap[modelId] || 'PaddleOCR-VL-1.6';
-
-  // 构建可选参数（根据模型不同）
-  const optionalPayload = {};
-  // 先尝试空对象，如果后续需要可再添加
-
-  // 1. 提交任务（使用 Buffer）
-  const submitUrl = 'https://paddleocr.aistudio-app.com/api/v2/ocr/jobs';
-  const formData = new FormData();
-  const buffer = Buffer.from(imageData, 'base64');
-  // 直接 append buffer，并指定文件名和 Content-Type
-  formData.append('file', buffer, { filename: 'upload.jpg', contentType: mimeType });
-  formData.append('model', model);
-  if (Object.keys(optionalPayload).length > 0) {
-    formData.append('optionalPayload', JSON.stringify(optionalPayload));
-  }
-
-  const submitRes = await fetch(submitUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `bearer ${token}`,
-    },
-    body: formData,
-  });
-
-  const submitText = await submitRes.text();
-  let submitData;
-  try {
-    submitData = JSON.parse(submitText);
-  } catch {
-    throw new Error(`提交任务返回非JSON: ${submitText}`);
-  }
-
-  if (!submitRes.ok) {
-    throw new Error(`提交任务失败 (${submitRes.status}): ${submitData?.message || submitText}`);
-  }
-
-  const jobId = submitData?.data?.jobId;
-  if (!jobId) {
-    throw new Error(`未获取到 jobId: ${JSON.stringify(submitData)}`);
-  }
-
-  // 2. 轮询结果
-  const maxAttempts = 120; // 4分钟
-  const pollInterval = 2000;
-  let jsonlUrl = null;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const statusRes = await fetch(`https://paddleocr.aistudio-app.com/api/v2/ocr/jobs/${jobId}`, {
-      headers: { 'Authorization': `bearer ${token}` }
-    });
-    const statusText = await statusRes.text();
-    let statusData;
-    try {
-      statusData = JSON.parse(statusText);
-    } catch {
-      throw new Error(`轮询返回非JSON: ${statusText}`);
-    }
-    if (!statusRes.ok) {
-      throw new Error(`轮询状态失败 (${statusRes.status}): ${statusData?.message || statusText}`);
-    }
-    const state = statusData?.data?.state;
-    if (state === 'done') {
-      jsonlUrl = statusData?.data?.resultUrl?.jsonUrl;
-      if (!jsonlUrl) {
-        throw new Error(`任务完成但未返回 jsonUrl: ${JSON.stringify(statusData)}`);
+    // ============================================
+    // 渠道一：Aistudio Baidu (适配官方最新 V2 异步接口)
+    // ============================================
+    if (channel === 'baidu') {
+      if (!process.env.PADDLE_TOKEN) {
+        throw new Error('环境变量未设置：请配置 PADDLE_TOKEN');
       }
-      break;
-    } else if (state === 'failed') {
-      const errorMsg = statusData?.data?.errorMsg || '未知错误';
-      throw new Error(`任务失败: ${errorMsg}`);
-    }
-    // pending 或 running 继续等待
-    await new Promise(r => setTimeout(r, pollInterval));
-  }
-  if (!jsonlUrl) {
-    throw new Error('轮询超时，未获取到结果');
-  }
 
-  // 3. 下载 JSONL 结果
-  const resultRes = await fetch(jsonlUrl);
-  if (!resultRes.ok) {
-    throw new Error(`获取结果失败 (${resultRes.status}): ${await resultRes.text()}`);
-  }
-  const resultText = await resultRes.text();
-
-  // 4. 解析 JSONL 并提取文本
-  const lines = resultText.split('\n').filter(line => line.trim() !== '');
-  let allText = '';
-  for (const line of lines) {
-    const entry = JSON.parse(line);
-    const result = entry.result;
-    if (model === 'PP-OCRv6') {
-      const ocrResults = result?.ocrResults || [];
-      const texts = ocrResults.flatMap(r => r?.prunedResult?.rec_texts || []);
-      allText += texts.join('\n') + '\n';
-    } else {
-      const layoutResults = result?.layoutParsingResults || [];
-      for (const resItem of layoutResults) {
-        allText += (resItem?.markdown?.text || '') + '\n';
+      const JOB_URL = "https://paddleocr.aistudio-app.com/api/v2/ocr/jobs";
+      
+      // 匹配新的模型名称
+      let actualModelName = "PaddleOCR-VL-1.6";
+      if (modelId === 'baidu-ocrv6' || modelId === 'baidu-ocrv5') {
+        actualModelName = "PP-OCRv6";
+      } else if (modelId === 'baidu-structurev3') {
+        actualModelName = "PP-StructureV3";
       }
+
+      // 构建请求 payload
+      const optionalPayload = {
+        useDocOrientationClassify: false,
+        useDocUnwarping: false,
+        useChartRecognition: false,
+        useTextlineOrientation: false
+      };
+
+      const formData = new FormData();
+      formData.append('model', actualModelName);
+      formData.append('optionalPayload', JSON.stringify(optionalPayload));
+      
+      // 将 Base64 转为 Blob 追加进 FormData
+      const buffer = Buffer.from(imageData, 'base64');
+      const blob = new Blob([buffer], { type: mimeType });
+      // 附带扩展名伪装成真实文件
+      formData.append('file', blob, mimeType === 'image/png' ? 'image.png' : 'image.jpg');
+
+      // 1. 提交 Job
+      const jobResponse = await fetch(JOB_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
+          // FormData fetch时切忌手动设置 Content-Type，由于boundary的原因会自动生成
+        },
+        body: formData,
+      });
+
+      if (!jobResponse.ok) {
+        const errorText = await jobResponse.text();
+        throw new Error(`百度 PaddleOCR 创建任务失败，状态码 ${jobResponse.status}: ${errorText}`);
+      }
+
+      const jobData = await jobResponse.json();
+      const jobId = jobData?.data?.jobId;
+      if (!jobId) throw new Error("无法获取到任务 jobId");
+
+      // 2. 轮询结果
+      let finalJsonlUrl = "";
+      const MAX_POLLING_ATTEMPTS = 25; // 最多轮询 25 次 (约 50 秒)，Vercel 有限制不能太久
+
+      for (let i = 0; i < MAX_POLLING_ATTEMPTS; i++) {
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 每次轮询间隔2秒
+
+        const pollResponse = await fetch(`${JOB_URL}/${jobId}`, {
+          method: 'GET',
+          headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` }
+        });
+
+        if (!pollResponse.ok) throw new Error("获取任务状态失败");
+        const pollResult = await pollResponse.json();
+        const state = pollResult?.data?.state;
+
+        if (state === 'done') {
+          finalJsonlUrl = pollResult?.data?.resultUrl?.jsonUrl;
+          break;
+        } else if (state === 'failed') {
+          throw new Error(`识别任务失败: ${pollResult?.data?.errorMsg}`);
+        }
+        // 如果是 'pending' 或 'running' 则继续循环
+      }
+
+      if (!finalJsonlUrl) {
+        throw new Error("任务超时未能完成，请稍后再试");
+      }
+
+      // 3. 拉取并解析 jsonl 结果文件
+      const jsonlResponse = await fetch(finalJsonlUrl);
+      if (!jsonlResponse.ok) throw new Error("无法获取解析结果文件");
+      
+      const jsonlText = await jsonlResponse.text();
+      const lines = jsonlText.split('\n').filter(line => line.trim() !== '');
+      let fullParsedText = [];
+
+      lines.forEach(line => {
+        try {
+          const parsed = JSON.parse(line);
+          const resultObj = parsed?.result || {};
+
+          // 如果是超轻量文本识别模型 PP-OCRv6
+          if (actualModelName === 'PP-OCRv6' && resultObj.ocrResults) {
+             const pageTexts = resultObj.ocrResults
+               .flatMap(res => res.prunedResult?.rec_texts || [])
+               .filter(Boolean);
+             if (pageTexts.length > 0) fullParsedText.push(pageTexts.join('\n'));
+          } 
+          // 如果是布局解析模型 (VL-1.6 / StructureV3)
+          else if (resultObj.layoutParsingResults) {
+             const pageTexts = resultObj.layoutParsingResults
+               .map(res => res?.markdown?.text || '')
+               .filter(Boolean);
+             if (pageTexts.length > 0) fullParsedText.push(pageTexts.join('\n\n'));
+          }
+        } catch (e) {
+          console.error("行数据解析错误: ", e);
+        }
+      });
+
+      recognizedText = fullParsedText.join('\n\n');
     }
-  }
-  recognizedText = allText.trim();
-}
 
     // ============================================
     // 渠道二：硅基流动 (SiliconFlow)
