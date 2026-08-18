@@ -12,15 +12,15 @@ import './App.css';
 // ====== 模型列表定义 ======
 const MODELS = [
   {
-    id: 'baidu-vl-1.5',
-    name: 'PaddleOCR-VL-1.5',
+    id: 'baidu-vl-1.6',
+    name: 'PaddleOCR-VL-1.6',
     badge: 'pp.png',
     desc: '突破扭曲倾斜，多模态行业SOTA',
     channel: 'baidu'
   },
   {
-    id: 'baidu-ocrv5',
-    name: 'PP-OCRv5',
+    id: 'baidu-ocrv6',
+    name: 'PP-OCRv6',
     badge: 'pp.png',
     desc: '超轻量文字识别，又快又准',
     channel: 'baidu'
