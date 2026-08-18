@@ -1,38 +1,23 @@
-import React, {
-  useState,
-  useRef,
-  useEffect,
-  useCallback
-} from 'react';
-
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import 'katex/dist/katex.min.css';
-
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
-
 import { marked } from 'marked';
-
 import TurndownService from 'turndown';
-
 import DOMPurify from 'dompurify';
-
 import './App.css';
 
-// ============================================================
-// 模型列表定义
-// ============================================================
-
+// ====== 模型列表定义 ======
 const MODELS = [
   {
-    id: 'baidu-vl-1.6',
-    name: 'PaddleOCR-VL-1.6',
+    id: 'baidu-vl-1.5',
+    name: 'PaddleOCR-VL-1.5',
     badge: 'pp.png',
-    desc: '基于百度官方 PaddleOCR-VL-1.6 的文档解析服务',
+    desc: '突破扭曲倾斜，多模态行业SOTA',
     channel: 'baidu'
   },
-
   {
     id: 'baidu-ocrv5',
     name: 'PP-OCRv5',
@@ -40,7 +25,6 @@ const MODELS = [
     desc: '超轻量文字识别，又快又准',
     channel: 'baidu'
   },
-
   {
     id: 'baidu-structurev3',
     name: 'PP-StructureV3',
@@ -48,3265 +32,843 @@ const MODELS = [
     desc: '通用文档解析，高精度零幻觉',
     channel: 'baidu'
   },
-
   {
     id: 'sili-vl-1.5',
     name: 'PaddleOCR-VL-1.5',
     badge: 'silicon.png',
     desc: '硅基流动版，识别能力较百度官方弱，轻量备用',
     channel: 'silicon',
-    apiName:
-      'PaddlePaddle/PaddleOCR-VL-1.5'
+    apiName: 'PaddlePaddle/PaddleOCR-VL-1.5'
   },
-
   {
     id: 'sili-deepseek',
     name: 'DeepSeek-OCR',
     badge: 'silicon.png',
     desc: '深度求索推出的顶尖视觉文字识别模型',
     channel: 'silicon',
-    apiName:
-      'deepseek-ai/DeepSeek-OCR'
+    apiName: 'deepseek-ai/DeepSeek-OCR'
   }
 ];
 
-// ============================================================
-// 预处理：清理 Markdown
-// ============================================================
-
+// ====== 预处理：清理 Markdown ======
 const preprocessText = (text) => {
-  if (!text) {
-    return '';
-  }
-
-  text = text.replace(
-    /[a-zA-Z_]*<\|\/?ref\|>\[\[.*?\]\]<\|\/?det\|>/g,
-    ''
-  );
-
-  text = text.replace(
-    /<\|\/?(ref|det|grounding)\|>/g,
-    ''
-  );
-
-  text = text.replace(
-    /\[\[\d+,\s*\d+,\s*\d+,\s*\d+\]\]/g,
-    ''
-  );
-
-  text = text.replace(
-    /\\\(/g,
-    '$$'
-  );
-
-  text = text.replace(
-    /\\\)/g,
-    '$$'
-  );
-
-  text = text.replace(
-    /\\\[/g,
-    '$$$$'
-  );
-
-  text = text.replace(
-    /\\\]/g,
-    '$$$$'
-  );
-
-  text = text.replace(
-    /([A-Za-z])\{(\d+)\}/g,
-    '$1_{$2}'
-  );
-
-  text = text.replace(
-    /\\sum\{([^}]+)\}/g,
-    '\\sum_{$1}'
-  );
-
+  if (!text) return '';
+  text = text.replace(/[a-zA-Z_]*<\|\/?ref\|>\[\[.*?\]\]<\|\/?det\|>/g, '');
+  text = text.replace(/<\|\/?(ref|det|grounding)\|>/g, '');
+  text = text.replace(/\[\[\d+,\s*\d+,\s*\d+,\s*\d+\]\]/g, '');
+  text = text.replace(/\\\(/g, '$$');
+  text = text.replace(/\\\)/g, '$$');
+  text = text.replace(/\\\[/g, '$$$$');
+  text = text.replace(/\\\]/g, '$$$$');
+  text = text.replace(/([A-Za-z])\{(\d+)\}/g, '$1_{$2}');
+  text = text.replace(/\\sum\{([^}]+)\}/g, '\\sum_{$1}');
   const tables = [];
-
-  text = text.replace(
-    /\|[^\n]+\|\n\|[-|\s]+\|(?:\n\|[^\n]+\|)+/g,
-    (match) => {
-      tables.push(match);
-
-      return `__TABLE_${tables.length - 1}__`;
-    }
-  );
-
-  text = text.replace(
-    /\\\\\(/g,
-    '$'
-  );
-
-  text = text.replace(
-    /\\\\\)/g,
-    '$'
-  );
-
-  text = text.replace(
-    /\\\\\[/g,
-    '$$'
-  );
-
-  text = text.replace(
-    /\\\\\]/g,
-    '$$'
-  );
-
-  text = text.replace(
-    /```[\s\S]*?```/g,
-    (match) =>
-      match
-        .slice(3, -3)
-        .trim()
-  );
-
-  text = text.replace(
-    /```\w*\n?/g,
-    ''
-  );
-
-  text = text.replace(
-    /(\d+)\.\s*\n+/g,
-    '$1. '
-  );
-
-  text = text.replace(
-    /\n*\$\$\s*([\s\S]*?)\s*\$\$\n*/g,
-    (_, formula) =>
-      `\n\n$$${formula.trim()}$$\n\n`
-  );
-
-  text = text.replace(
-    /\$\s*(.*?)\s*\$/g,
-    (_, formula) =>
-      `$${formula.trim()}$`
-  );
-
-  text = text.replace(
-    /(\d+\.)\s*(\$\$[\s\S]*?\$\$)/g,
-    '$1\n\n$2'
-  );
-
-  text = text.replace(
-    /(\d+)\.\s+/g,
-    '$1'
-  );
-
-  text = text.replace(
-    /(\d+)\.\s+/g,
-    '$1.'
-  );
-
-  text = text.replace(
-    /(\d+)\)\s+/g,
-    '$1)'
-  );
-
-  text = text.replace(
-    /-\s+/g,
-    '-'
-  );
-
-  text = text.replace(
-    /\*\s+/g,
-    '*'
-  );
-
-  text = text.replace(
-    /\+\s+/g,
-    '+'
-  );
-
-  text = text.replace(
-    />\s+/g,
-    '>'
-  );
-
-  text = text.replace(
-    /#\s+/g,
-    '#'
-  );
-
-  text = text.replace(
-    /\n{2,}/g,
-    '\n\n'
-  );
-
-  text = text.replace(
-    /\s*\$\^\{([^}]+)\}\$\s*/g,
-    (match, exponent) => {
-      const superscripts = {
-        '0': '⁰',
-        '1': '¹',
-        '2': '²',
-        '3': '³',
-        '4': '⁴',
-        '5': '⁵',
-        '6': '⁶',
-        '7': '⁷',
-        '8': '⁸',
-        '9': '⁹',
-        'n': 'ⁿ',
-        'm': 'ᵐ'
-      };
-
-      if (
-        exponent in superscripts
-      ) {
-        return superscripts[
-          exponent
-        ];
-      }
-
-      return '^' + exponent;
-    }
-  );
-
-  text = text.replace(
-    /(\d)\*(?=\d)/g,
-    '$1\\*'
-  );
-
-  text = text.replace(
-    /(?<=\d)\*(\d)/g,
-    '\\*$1'
-  );
-
-  text = text.replace(
-    /__TABLE_(\d+)__/g,
-    (_, i) =>
-      `\n\n${tables[parseInt(i)]}\n\n`
-  );
-
+  text = text.replace(/\|[^\n]+\|\n\|[-|\s]+\|(?:\n\|[^\n]+\|)+/g, (match) => {
+    tables.push(match);
+    return `__TABLE_${tables.length - 1}__`;
+  });
+  text = text.replace(/\\\\\(/g, '$');
+  text = text.replace(/\\\\\)/g, '$');
+  text = text.replace(/\\\\\[/g, '$$');
+  text = text.replace(/\\\\\]/g, '$$');
+  text = text.replace(/```[\s\S]*?```/g, (match) => match.slice(3, -3).trim());
+  text = text.replace(/```\w*\n?/g, '');
+  text = text.replace(/(\d+)\.\s*\n+/g, '$1. ');
+  text = text.replace(/\n*\$\$\s*([\s\S]*?)\s*\$\$\n*/g, (_, formula) => `\n\n$$${formula.trim()}$$\n\n`);
+  text = text.replace(/\$\s*(.*?)\s*\$/g, (_, formula) => `$${formula.trim()}$`);
+  text = text.replace(/(\d+\.)\s*(\$\$[\s\S]*?\$\$)/g, '$1\n\n$2');
+  text = text.replace(/(\d+)\.\s+/g, '$1');
+  text = text.replace(/(\d+)\.\s+/g, '$1.');
+  text = text.replace(/(\d+)\)\s+/g, '$1)');
+  text = text.replace(/-\s+/g, '-');
+  text = text.replace(/\*\s+/g, '*');
+  text = text.replace(/\+\s+/g, '+');
+  text = text.replace(/>\s+/g, '>');
+  text = text.replace(/#\s+/g, '#');
+  text = text.replace(/\n{2,}/g, '\n\n');
+  text = text.replace(/\s*\$\^\{([^}]+)\}\$\s*/g, (match, exponent) => {
+    const superscripts = {
+      '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+      '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+      'n': 'ⁿ', 'm': 'ᵐ'
+    };
+    if (exponent in superscripts) return superscripts[exponent];
+    return '^' + exponent;
+  });
+  text = text.replace(/(\d)\*(?=\d)/g, '$1\\*');
+  text = text.replace(/(?<=\d)\*(\d)/g, '\\*$1');
+  text = text.replace(/__TABLE_(\d+)__/g, (_, i) => `\n\n${tables[parseInt(i)]}\n\n`);
   return text.trim();
 };
 
-// ============================================================
-// 文件转 Base64
-// ============================================================
-
 const fileToBase64 = (file) => {
-  return new Promise(
-    (resolve) => {
-      const reader =
-        new FileReader();
-
-      reader.onloadend = () => {
-        resolve(
-          reader.result.split(',')[1]
-        );
-      };
-
-      reader.readAsDataURL(
-        file
-      );
-    }
-  );
-};
-
-// ============================================================
-// 带超时的 fetch
-// ============================================================
-
-const fetchWithTimeout = (
-  url,
-  options,
-  timeout = 30000
-) => {
-  const controller =
-    new AbortController();
-
-  const fetchOptions = {
-    ...options,
-    signal:
-      controller.signal
-  };
-
-  const timeoutId =
-    setTimeout(
-      () =>
-        controller.abort(),
-      timeout
-    );
-
-  return fetch(
-    url,
-    fetchOptions
-  ).finally(
-    () =>
-      clearTimeout(
-        timeoutId
-      )
-  );
-};
-
-// ============================================================
-// Turndown
-// ============================================================
-
-const turndownService =
-  new TurndownService({
-    headingStyle: 'atx',
-    hr: '---',
-    bulletListMarker: '*',
-    codeBlockStyle: 'fenced',
-    emDelimiter: '*',
-    strongDelimiter: '**'
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+    reader.readAsDataURL(file);
   });
-
-turndownService.keep([
-  'table',
-  'thead',
-  'tbody',
-  'tr',
-  'th',
-  'td'
-]);
-
-turndownService.addRule(
-  'katex',
-  {
-    filter: function (node) {
-      return (
-        (
-          node.nodeName === 'SPAN' &&
-          node.classList.contains(
-            'katex-display'
-          )
-        ) ||
-        (
-          node.nodeName === 'SPAN' &&
-          node.classList.contains(
-            'katex'
-          )
-        )
-      );
-    },
-
-    replacement:
-      function (
-        content,
-        node
-      ) {
-        const latex =
-          node.querySelector(
-            'annotation[encoding="application/x-tex"]'
-          );
-
-        if (latex) {
-          const formula =
-            latex.textContent;
-
-          if (
-            node.classList.contains(
-              'katex-display'
-            )
-          ) {
-            return `\n\n$$${formula}$$\n\n`;
-          }
-
-          return `$${formula}$`;
-        }
-
-        return node.outerHTML;
-      }
-  }
-);
-
-// ============================================================
-// 并发处理工具
-// ============================================================
-
-const concurrentProcess = async (
-  items,
-  processor,
-  maxConcurrent = 2
-) => {
-  const queue = [
-    ...items.entries()
-  ];
-
-  const workers =
-    new Array(
-      maxConcurrent
-    )
-      .fill()
-      .map(
-        async () => {
-          while (
-            queue.length > 0
-          ) {
-            const [
-              realIdx,
-              item
-            ] =
-              queue.shift();
-
-            await processor(
-              item,
-              realIdx
-            ).catch(
-              err =>
-                console.error(
-                  err
-                )
-            );
-          }
-        }
-      );
-
-  await Promise.all(
-    workers
-  );
 };
 
-// ============================================================
-// 动态加载 PDF.js
-// ============================================================
+// ====== 带超时的 fetch 工具 ======
+const fetchWithTimeout = (url, options, timeout = 30000) => {
+  const controller = new AbortController();
+  const fetchOptions = { ...options, signal: controller.signal };
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  return fetch(url, fetchOptions).finally(() => clearTimeout(timeoutId));
+};
 
+const turndownService = new TurndownService({
+  headingStyle: 'atx',
+  hr: '---',
+  bulletListMarker: '*',
+  codeBlockStyle: 'fenced',
+  emDelimiter: '*',
+  strongDelimiter: '**',
+});
+turndownService.keep(['table', 'thead', 'tbody', 'tr', 'th', 'td']);
+turndownService.addRule('katex', {
+  filter: function (node) {
+    return (
+      (node.nodeName === 'SPAN' && node.classList.contains('katex-display')) ||
+      (node.nodeName === 'SPAN' && node.classList.contains('katex'))
+    );
+  },
+  replacement: function (content, node) {
+    const latex = node.querySelector('annotation[encoding="application/x-tex"]');
+    if (latex) {
+      const formula = latex.textContent;
+      if (node.classList.contains('katex-display')) {
+        return `\n\n$$${formula}$$\n\n`;
+      } else {
+        return `$${formula}$`;
+      }
+    }
+    return node.outerHTML;
+  },
+});
+
+// ====== 并发处理工具 ======
+const concurrentProcess = async (items, processor, maxConcurrent = 2) => {
+  const queue = [...items.entries()];
+  const workers = new Array(maxConcurrent).fill().map(async () => {
+    while (queue.length > 0) {
+      const [realIdx, item] = queue.shift();
+      await processor(item, realIdx).catch(err => console.error(err));
+    }
+  });
+  await Promise.all(workers);
+};
+
+// ====== 动态加载 PDF.js ======
 let pdfjsLibPromise = null;
-
 const loadPdfJs = () => {
   if (!pdfjsLibPromise) {
-    pdfjsLibPromise =
-      new Promise(
-        (
-          resolve,
-          reject
-        ) => {
-          if (
-            window.pdfjsLib
-          ) {
-            resolve(
-              window.pdfjsLib
-            );
-
-            return;
-          }
-
-          const script =
-            document.createElement(
-              'script'
-            );
-
-          script.src =
-            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-
-          script.onload =
-            () => {
-              window
-                .pdfjsLib
-                .GlobalWorkerOptions
-                .workerSrc =
-                'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-              resolve(
-                window.pdfjsLib
-              );
-            };
-
-          script.onerror =
-            () =>
-              reject(
-                new Error(
-                  'PDF.js 加载失败'
-                )
-              );
-
-          document.head.appendChild(
-            script
-          );
-        }
-      );
+    pdfjsLibPromise = new Promise((resolve, reject) => {
+      if (window.pdfjsLib) {
+        resolve(window.pdfjsLib);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.onload = () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        resolve(window.pdfjsLib);
+      };
+      script.onerror = () => reject(new Error('PDF.js 加载失败'));
+      document.head.appendChild(script);
+    });
   }
-
   return pdfjsLibPromise;
 };
 
-// ============================================================
-// PDF 转图片
-// ============================================================
-
-const pdfToImages = async (
-  file
-) => {
-  const pdfjsLib =
-    await loadPdfJs();
-
-  const arrayBuffer =
-    await file.arrayBuffer();
-
-  const pdf =
-    await pdfjsLib
-      .getDocument({
-        data: arrayBuffer
-      })
-      .promise;
-
+// ====== PDF 转图片工具 ======
+const pdfToImages = async (file) => {
+  const pdfjsLib = await loadPdfJs();
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const images = [];
-
-  for (
-    let i = 1;
-    i <= pdf.numPages;
-    i++
-  ) {
-    const page =
-      await pdf.getPage(
-        i
-      );
-
-    const viewport =
-      page.getViewport({
-        scale: 2
-      });
-
-    const canvas =
-      document.createElement(
-        'canvas'
-      );
-
-    canvas.width =
-      viewport.width;
-
-    canvas.height =
-      viewport.height;
-
-    const ctx =
-      canvas.getContext(
-        '2d'
-      );
-
-    await page.render({
-      canvasContext: ctx,
-      viewport
-    }).promise;
-
-    const blob =
-      await new Promise(
-        resolve =>
-          canvas.toBlob(
-            resolve,
-            'image/png'
-          )
-      );
-
-    images.push(
-      new File(
-        [
-          blob
-        ],
-        `${
-          file.name ||
-          'pdf'
-        }_page_${i}.png`,
-        {
-          type: 'image/png'
-        }
-      )
-    );
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    images.push(new File([blob], `${file.name || 'pdf'}_page_${i}.png`, { type: 'image/png' }));
   }
-
   return images;
 };
 
-// ============================================================
-// App
-// ============================================================
-
 function App() {
-  const [
-    images,
-    setImages
-  ] = useState([]);
+  const [images, setImages] = useState([]);
+  const [results, setResults] = useState([]);
+  const [resultModels, setResultModels] = useState([]);
+  const [routerResults, setRouterResults] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isDraggingGlobal, setIsDraggingGlobal] = useState(false);
+  const dropZoneRef = useRef(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [imageUrl, setImageUrl] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [streamingStatus, setStreamingStatus] = useState({});
+  const [completedCount, setCompletedCount] = useState(0);
+  const completedIndicesRef = useRef(new Set());
 
-  const [
-    results,
-    setResults
-  ] = useState([]);
+  const [isDraggingModal, setIsDraggingModal] = useState(false);
+  const [modalPosition, setModalPosition] = useState({ x: 0, y: 0 });
+  const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 });
+  const [modalScale, setModalScale] = useState(1);
+  const [editText, setEditText] = useState('');
+  const editDivRef = useRef(null);
 
-  const [
-    resultModels,
-    setResultModels
-  ] = useState([]);
-
-  const [
-    routerResults,
-    setRouterResults
-  ] = useState([]);
-
-  const [
-    currentIndex,
-    setCurrentIndex
-  ] = useState(0);
-
-  const [
-    isLoading,
-    setIsLoading
-  ] = useState(false);
-
-  const [
-    isDragging,
-    setIsDragging
-  ] = useState(false);
-
-  const [
-    isDraggingGlobal,
-    setIsDraggingGlobal
-  ] = useState(false);
-
-  const dropZoneRef =
-    useRef(null);
-
-  const [
-    showUrlInput,
-    setShowUrlInput
-  ] = useState(false);
-
-  const [
-    imageUrl,
-    setImageUrl
-  ] = useState('');
-
-  const [
-    showModal,
-    setShowModal
-  ] = useState(false);
-
-  const [
-    streamingStatus,
-    setStreamingStatus
-  ] = useState({});
-
-  const [
-    completedCount,
-    setCompletedCount
-  ] = useState(0);
-
-  const completedIndicesRef =
-    useRef(
-      new Set()
-    );
-
-  const [
-    isDraggingModal,
-    setIsDraggingModal
-  ] = useState(false);
-
-  const [
-    modalPosition,
-    setModalPosition
-  ] = useState({
-    x: 0,
-    y: 0
-  });
-
-  const [
-    modalOffset,
-    setModalOffset
-  ] = useState({
-    x: 0,
-    y: 0
-  });
-
-  const [
-    modalScale,
-    setModalScale
-  ] = useState(1);
-
-  const [
-    editText,
-    setEditText
-  ] = useState('');
-
-  const editDivRef =
-    useRef(null);
-
-  const [
-    selectedModel,
-    setSelectedModel
-  ] = useState(
-    MODELS[0]
-  );
-
-  const [
-    showDropdown,
-    setShowDropdown
-  ] = useState(false);
-
-  const dropdownRef =
-    useRef(null);
-
-  // ==========================================================
-  // 点击外部关闭模型下拉框
-  // ==========================================================
+  const [selectedModel, setSelectedModel] = useState(MODELS[0]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
-    const handleClickOutside =
-      (e) => {
-        if (
-          dropdownRef.current &&
-          !dropdownRef.current.contains(
-            e.target
-          )
-        ) {
-          setShowDropdown(
-            false
-          );
-        }
-      };
-
-    document.addEventListener(
-      'mousedown',
-      handleClickOutside
-    );
-
-    return () =>
-      document.removeEventListener(
-        'mousedown',
-        handleClickOutside
-      );
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // ==========================================================
-  // 打字机效果
-  // ==========================================================
-
-  const typewriterEffect =
-    useCallback(
-      (
-        fullText,
-        index,
-        shouldStream
-      ) => {
-        if (
-          !shouldStream
-        ) {
-          setResults(
-            prev => {
-              const updated =
-                [...prev];
-
-              updated[index] =
-                fullText;
-
-              return updated;
-            }
-          );
-
-          setStreamingStatus(
-            prev => ({
-              ...prev,
-              [index]:
-                false
-            })
-          );
-
-          return;
-        }
-
-        let pos = 0;
-
-        const speed = 15;
-
-        const step =
-          Math.max(
-            2,
-            Math.ceil(
-              fullText.length /
-                180
-            )
-          );
-
-        const timer =
-          setInterval(
-            () => {
-              if (
-                pos <
-                fullText.length
-              ) {
-                pos += step;
-
-                const current =
-                  fullText.substring(
-                    0,
-                    pos
-                  );
-
-                setResults(
-                  prev => {
-                    const updated =
-                      [...prev];
-
-                    updated[index] =
-                      current;
-
-                    return updated;
-                  }
-                );
-              } else {
-                clearInterval(
-                  timer
-                );
-
-                setStreamingStatus(
-                  prev => ({
-                    ...prev,
-                    [index]:
-                      false
-                  })
-                );
-              }
-            },
-            speed
-          );
-
-        return () =>
-          clearInterval(
-            timer
-          );
-      },
-      []
-    );
-
-  // ==========================================================
-  // 标记完成
-  // ==========================================================
-
-  const markComplete =
-    useCallback(
-      index => {
-        if (
-          !completedIndicesRef.current.has(
-            index
-          )
-        ) {
-          completedIndicesRef.current.add(
-            index
-          );
-
-          setCompletedCount(
-            prev =>
-              prev + 1
-          );
-        }
-      },
-      []
-    );
-
-  // ==========================================================
-  // 文件识别
-  // ==========================================================
-
-  const handleFile =
-    useCallback(
-      async (
-        file,
-        index,
-        isBatch = false
-      ) => {
-        if (
-          !file.type.startsWith(
-            'image/'
-          )
-        ) {
-          return;
-        }
-
-        try {
-          setStreamingStatus(
-            prev => ({
-              ...prev,
-              [index]:
-                true
-            })
-          );
-
-          setResults(
-            prev => {
-              const newResults =
-                [...prev];
-
-              newResults[index] =
-                '';
-
-              return newResults;
-            }
-          );
-
-          setRouterResults(
-            prev => {
-              const u =
-                [...prev];
-
-              u[index] =
-                null;
-
-              return u;
-            }
-          );
-
-          const imageData =
-            await fileToBase64(
-              file
-            );
-
-          // ====================================================
-          // 提前分类请求
-          // 仅 PaddleOCR-VL-1.5 / SiliconFlow
-          // ====================================================
-
-          if (
-            selectedModel.channel ===
-              'silicon' &&
-            selectedModel.apiName ===
-              'PaddlePaddle/PaddleOCR-VL-1.5'
-          ) {
-            const classifyWithRetry =
-              async () => {
-                for (
-                  let attempt = 1;
-                  attempt <= 3;
-                  attempt++
-                ) {
-                  try {
-                    const res =
-                      await fetchWithTimeout(
-                        '/api/recognize',
-                        {
-                          method:
-                            'POST',
-                          headers: {
-                            'Content-Type':
-                              'application/json'
-                          },
-                          body:
-                            JSON.stringify({
-                              imageData,
-                              mimeType:
-                                file.type,
-                              channel:
-                                'silicon',
-                              apiName:
-                                'PaddlePaddle/PaddleOCR-VL-1.5',
-                              classifyOnly:
-                                true
-                            })
-                        },
-                        5000
-                      );
-
-                    if (
-                      res.ok
-                    ) {
-                      const data =
-                        await res.json();
-
-                      if (
-                        data.routerResult
-                      ) {
-                        setRouterResults(
-                          prev => {
-                            const u =
-                              [...prev];
-
-                            u[index] =
-                              data.routerResult;
-
-                            return u;
-                          }
-                        );
-                      }
-
-                      return;
-                    }
-                  } catch (
-                    err
-                  ) {
-                    console.error(
-                      `分类请求重试 ${attempt}/3 网络/其他错误`,
-                      err.message
-                    );
-                  }
-
-                  if (
-                    attempt <
-                    3
-                  ) {
-                    await new Promise(
-                      resolve =>
-                        setTimeout(
-                          resolve,
-                          500
-                        )
-                    );
-                  }
-                }
-
-                setRouterResults(
-                  prev => {
-                    const u =
-                      [...prev];
-
-                    u[index] =
-                      '路由分类服务异常，使用默认OCR';
-
-                    return u;
-                  }
-                );
-              };
-
-            // 与正式识别请求并发
-            classifyWithRetry();
-          }
-
-          // ====================================================
-          // 正式识别请求
-          // 所有模型统一重试 3 次
-          // ====================================================
-
-          let response;
-
-          let lastError =
-            null;
-
-          const maxRetries = 3;
-
-          for (
-            let attempt = 1;
-            attempt <=
-            maxRetries;
-            attempt++
-          ) {
-            try {
-              if (
-                attempt > 1
-              ) {
-                let reason =
-                  '服务请求异常';
-
-                const msg =
-                  lastError?.message ||
-                  '';
-
-                if (
-                  msg.includes(
-                    'fetch'
-                  ) ||
-                  msg.includes(
-                    'Failed to fetch'
-                  ) ||
-                  msg.includes(
-                    'NetworkError'
-                  )
-                ) {
-                  reason =
-                    '网络连接异常';
-                } else if (
-                  msg.includes(
-                    '状态码'
-                  ) ||
-                  msg.includes(
-                    'status'
-                  ) ||
-                  msg.includes(
-                    '503'
-                  ) ||
-                  msg.includes(
-                    '502'
-                  ) ||
-                  msg.includes(
-                    '504'
-                  )
-                ) {
-                  reason =
-                    '模型服务暂时不可用';
-                } else if (
-                  msg.includes(
-                    '超时'
-                  ) ||
-                  msg.includes(
-                    'timeout'
-                  )
-                ) {
-                  reason =
-                    '请求超时';
-                } else if (
-                  msg.includes(
-                    '环境变量'
-                  )
-                ) {
-                  reason =
-                    '服务配置错误';
-                }
-
-                setResults(
-                  prev => {
-                    const updated =
-                      [...prev];
-
-                    updated[index] =
-                      `>  **${reason}，将在 10 秒后自动重试（${attempt}/${maxRetries}）**\n>\n> <span class="breathe-ring"></span> **正在重试中...**`;
-
-                    return updated;
-                  }
-                );
-              }
-
-              // 百度新版 API 是异步任务。
-              // 这里给足 180 秒等待时间。
-              let timeoutMs =
-                180000;
-
-              if (
-                selectedModel.channel ===
-                'baidu'
-              ) {
-                timeoutMs =
-                  180000;
-              }
-
-              response =
-                await fetchWithTimeout(
-                  '/api/recognize',
-                  {
-                    method:
-                      'POST',
-                    headers: {
-                      'Content-Type':
-                        'application/json'
-                    },
-                    body:
-                      JSON.stringify({
-                        imageData,
-                        mimeType:
-                          file.type,
-                        modelId:
-                          selectedModel.id,
-                        channel:
-                          selectedModel.channel,
-                        apiName:
-                          selectedModel.apiName
-                      })
-                  },
-                  timeoutMs
-                );
-
-              if (
-                !response.ok
-              ) {
-                const errorData =
-                  await response
-                    .json()
-                    .catch(
-                      () => ({
-                        error:
-                          '请求失败'
-                      })
-                    );
-
-                throw new Error(
-                  errorData.error ||
-                    '服务异常'
-                );
-              }
-
-              break;
-            } catch (
-              err
-            ) {
-              if (
-                err.name ===
-                'AbortError'
-              ) {
-                lastError =
-                  new Error(
-                    '请求超时，请检查网络连接'
-                  );
-              } else {
-                lastError =
-                  err;
-              }
-
-              if (
-                attempt <
-                maxRetries
-              ) {
-                await new Promise(
-                  resolve =>
-                    setTimeout(
-                      resolve,
-                      10000
-                    )
-                );
-              } else {
-                await new Promise(
-                  resolve =>
-                    setTimeout(
-                      resolve,
-                      2000
-                    )
-                );
-              }
-            }
-          }
-
-          if (
-            !response ||
-            !response.ok
-          ) {
-            throw (
-              lastError ||
-              new Error(
-                '请求失败'
-              )
-            );
-          }
-
-          const data =
-            await response.json();
-
-          const finalText =
-            preprocessText(
-              data.text || ''
-            );
-
-          setResultModels(
-            prev => {
-              const updated =
-                [...prev];
-
-              updated[index] = {
-                channel:
-                  selectedModel.channel,
-                name:
-                  selectedModel.name
-              };
-
-              return updated;
-            }
-          );
-
-          // ====================================================
-          // 如果识别响应带路由标签
-          // ====================================================
-
-          if (
-            data.routerResult
-          ) {
-            setRouterResults(
-              prev => {
-                const u =
-                  [...prev];
-
-                const current =
-                  u[index];
-
-                const normalTypes =
-                  [
-                    '表格',
-                    '公式',
-                    '纯文本'
-                  ];
-
-                if (
-                  current &&
-                  normalTypes.includes(
-                    current
-                  ) &&
-                  !normalTypes.includes(
-                    data.routerResult
-                  )
-                ) {
-                  return u;
-                }
-
-                u[index] =
-                  data.routerResult;
-
-                return u;
-              }
-            );
-          }
-
-          // ====================================================
-          // 显示结果
-          // ====================================================
-
-          typewriterEffect(
-            finalText,
-            index,
-            !isBatch
-          );
-
-          markComplete(
-            index
-          );
-        } catch (
-          error
-        ) {
-          console.error(
-            '识别失败:',
-            error
-          );
-
-          let errMsg;
-
-          if (
-            error.name ===
-              'AbortError' ||
-            error.message.includes(
-              '超时'
-            )
-          ) {
-            errMsg =
-              '> ⚠️ **系统提示：请求超时，请检查网络连接**';
-          } else {
-            errMsg =
-              `> ⚠️ **系统提示：图片处理失败**\n>\n> ${error.message}`;
-          }
-
-          setResults(
-            prev => {
-              const updated =
-                [...prev];
-
-              updated[index] =
-                errMsg;
-
-              return updated;
-            }
-          );
-
-          setStreamingStatus(
-            prev => ({
-              ...prev,
-              [index]:
-                false
-            })
-          );
-
-          markComplete(
-            index
-          );
-        }
-      },
-      [
-        typewriterEffect,
-        selectedModel,
-        markComplete
-      ]
-    );
-
-  // ==========================================================
-  // 批量处理文件
-  // ==========================================================
-
-  const processFiles =
-    useCallback(
-      async files => {
-        setIsLoading(
-          true
-        );
-
-        try {
-          const expandedFiles =
-            [];
-
-          for (
-            const file of files
-          ) {
-            if (
-              file.type ===
-              'application/pdf'
-            ) {
-              try {
-                const pdfImages =
-                  await pdfToImages(
-                    file
-                  );
-
-                expandedFiles.push(
-                  ...pdfImages
-                );
-              } catch (
-                err
-              ) {
-                console.error(
-                  'PDF 转换失败:',
-                  err
-                );
-
-                alert(
-                  'PDF 处理失败：' +
-                    err.message
-                );
-              }
-            } else if (
-              file.type.startsWith(
-                'image/'
-              )
-            ) {
-              expandedFiles.push(
-                file
-              );
-            }
-          }
-
-          if (
-            expandedFiles.length ===
-            0
-          ) {
-            alert(
-              '没有可处理的文件（仅支持图片和 PDF）'
-            );
-
-            setIsLoading(
-              false
-            );
-
-            return;
-          }
-
-          const startIdx =
-            images.length;
-
-          const urls =
-            expandedFiles.map(
-              f =>
-                URL.createObjectURL(
-                  f
-                )
-            );
-
-          setImages(
-            prev => [
-              ...prev,
-              ...urls
-            ]
-          );
-
-          setResults(
-            prev => [
-              ...prev,
-              ...new Array(
-                expandedFiles.length
-              ).fill('')
-            ]
-          );
-
-          setResultModels(
-            prev => [
-              ...prev,
-              ...new Array(
-                expandedFiles.length
-              ).fill(null)
-            ]
-          );
-
-          setRouterResults(
-            prev => [
-              ...prev,
-              ...new Array(
-                expandedFiles.length
-              ).fill(null)
-            ]
-          );
-
-          setCurrentIndex(
-            startIdx
-          );
-
-          setIsLoading(
-            false
-          );
-
-          const isBatch =
-            expandedFiles.length >
-            1;
-
-          await concurrentProcess(
-            expandedFiles,
-            (
-              file,
-              fileIdx
-            ) =>
-              handleFile(
-                file,
-                startIdx +
-                  fileIdx,
-                isBatch
-              ),
-            2
-          );
-        } catch (
-          err
-        ) {
-          alert(
-            '处理文件时出错：' +
-              err.message
-          );
-
-          setIsLoading(
-            false
-          );
-        }
-      },
-      [
-        images.length,
-        handleFile
-      ]
-    );
-
-  // ==========================================================
-  // 粘贴
-  // ==========================================================
-
-  useEffect(() => {
-    const handlePaste =
-      async e => {
-        if (
-          editDivRef.current?.contains(
-            e.target
-          ) ||
-          showModal
-        ) {
-          return;
-        }
-
-        e.preventDefault();
-
-        const items =
-          Array.from(
-            e.clipboardData.items
-          );
-
-        const newFiles =
-          [];
-
-        for (
-          const item of items
-        ) {
-          if (
-            item.type.startsWith(
-              'image/'
-            ) ||
-            item.type ===
-              'application/pdf'
-          ) {
-            const file =
-              item.getAsFile();
-
-            if (file) {
-              newFiles.push(
-                file
-              );
-            }
-          } else if (
-            item.type ===
-            'text/plain'
-          ) {
-            item.getAsString(
-              text => {
-                if (
-                  text.match(
-                    /https?:\/\//i
-                  )
-                ) {
-                  setImageUrl(
-                    text
-                  );
-
-                  setShowUrlInput(
-                    true
-                  );
-                }
-              }
-            );
-          }
-        }
-
-        if (
-          newFiles.length >
-          0
-        ) {
-          processFiles(
-            newFiles
-          );
-        }
-      };
-
-    document.addEventListener(
-      'paste',
-      handlePaste
-    );
-
-    return () =>
-      document.removeEventListener(
-        'paste',
-        handlePaste
-      );
-  }, [
-    processFiles,
-    showModal
-  ]);
-
-  // ==========================================================
-  // 文件上传
-  // ==========================================================
-
-  const handleImageUpload =
-    async e => {
-      const files =
-        Array.from(
-          e.target.files
-        );
-
-      if (
-        !files.length
-      ) {
-        return;
-      }
-
-      await processFiles(
-        files
-      );
-
-      if (e.target) {
-        e.target.value =
-          null;
-      }
-    };
-
-  // ==========================================================
-  // 拖拽上传
-  // ==========================================================
-
-  const handleDrop =
-    async e => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      setIsDragging(
-        false
-      );
-
-      setIsDraggingGlobal(
-        false
-      );
-
-      const files =
-        Array.from(
-          e.dataTransfer.files
-        ).filter(
-          f =>
-            f.type.startsWith(
-              'image/'
-            ) ||
-            f.type ===
-              'application/pdf'
-        );
-
-      if (
-        !files.length
-      ) {
-        const items =
-          Array.from(
-            e.dataTransfer.items
-          );
-
-        const urls =
-          await Promise.all(
-            items
-              .filter(
-                i =>
-                  i.kind ===
-                    'string' &&
-                  (
-                    i.type ===
-                      'text/uri-list' ||
-                    i.type ===
-                      'text/plain'
-                  )
-              )
-              .map(
-                i =>
-                  new Promise(
-                    resolve =>
-                      i.getAsString(
-                        resolve
-                      )
-                  )
-              )
-          );
-
-        const imgUrl =
-          urls.find(
-            u =>
-              u?.match(
-                /\.(jpg|jpeg|png|gif|webp|avif)(\?.*)?$/i
-              )
-          );
-
-        if (imgUrl) {
-          setImageUrl(
-            imgUrl
-          );
-
-          setShowUrlInput(
-            true
-          );
-        }
-
-        return;
-      }
-
-      processFiles(
-        files
-      );
-    };
-
-  // ==========================================================
-  // URL 上传
-  // ==========================================================
-
-  const handleUrlSubmit =
-    async e => {
-      e.preventDefault();
-
-      if (!imageUrl) {
-        return;
-      }
-
-      setIsLoading(
-        true
-      );
-
-      setShowUrlInput(
-        false
-      );
-
-      try {
-        let blob;
-
-        try {
-          const res =
-            await fetch(
-              imageUrl,
-              {
-                signal:
-                  AbortSignal.timeout(
-                    10000
-                  )
-              }
-            );
-
-          if (!res.ok) {
-            throw new Error();
-          }
-
-          blob =
-            await res.blob();
-        } catch {
-          const proxyUrl =
-            `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
-
-          const res =
-            await fetch(
-              proxyUrl,
-              {
-                signal:
-                  AbortSignal.timeout(
-                    15000
-                  )
-              }
-            );
-
-          if (!res.ok) {
-            throw new Error();
-          }
-
-          blob =
-            await res.blob();
-        }
-
-        const file =
-          new File(
-            [
-              blob
-            ],
-            'url_image.jpg',
-            {
-              type:
-                blob.type
-            }
-          );
-
-        await processFiles(
-          [file]
-        );
-
-        setImageUrl(
-          ''
-        );
-      } catch (
-        err
-      ) {
-        alert(
-          `无法加载图片: ${err.message}`
-        );
-
-        setShowUrlInput(
-          true
-        );
-
-        setIsLoading(
-          false
-        );
-      }
-    };
-
-  // ==========================================================
-  // 上一张 / 下一张
-  // ==========================================================
-
-  const handlePrevImage =
-    () => {
-      if (
-        currentIndex >
-          0 &&
-        !isLoading
-      ) {
-        setCurrentIndex(
-          currentIndex - 1
-        );
-      }
-    };
-
-  const handleNextImage =
-    () => {
-      if (
-        currentIndex <
-          images.length - 1 &&
-        !isLoading
-      ) {
-        setCurrentIndex(
-          currentIndex + 1
-        );
-      }
-    };
-
-  // ==========================================================
-  // 全局拖拽
-  // ==========================================================
-
-  useEffect(() => {
-    const dragEnter =
-      e => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (
-          e.dataTransfer?.types.includes(
-            'Files'
-          )
-        ) {
-          setIsDraggingGlobal(
-            true
-          );
-        }
-      };
-
-    const dragOver =
-      e => {
-        e.preventDefault();
-        e.stopPropagation();
-      };
-
-    const dragLeave =
-      e => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (
-          !e.relatedTarget ||
-          e.relatedTarget ===
-            document.documentElement
-        ) {
-          setIsDraggingGlobal(
-            false
-          );
-
-          setIsDragging(
-            false
-          );
-        }
-      };
-
-    const drop =
-      e => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (
-          dropZoneRef.current &&
-          !dropZoneRef.current.contains(
-            e.target
-          )
-        ) {
-          setIsDraggingGlobal(
-            false
-          );
-
-          setIsDragging(
-            false
-          );
-        }
-      };
-
-    window.addEventListener(
-      'dragenter',
-      dragEnter
-    );
-
-    window.addEventListener(
-      'dragover',
-      dragOver
-    );
-
-    window.addEventListener(
-      'dragleave',
-      dragLeave
-    );
-
-    window.addEventListener(
-      'drop',
-      drop
-    );
-
-    return () => {
-      window.removeEventListener(
-        'dragenter',
-        dragEnter
-      );
-
-      window.removeEventListener(
-        'dragover',
-        dragOver
-      );
-
-      window.removeEventListener(
-        'dragleave',
-        dragLeave
-      );
-
-      window.removeEventListener(
-        'drop',
-        drop
-      );
-    };
-  }, []);
-
-  // ==========================================================
-  // Drop Zone
-  // ==========================================================
-
-  const handleDragEnter =
-    e => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (
-        e.dataTransfer.types.includes(
-          'Files'
-        )
-      ) {
-        setIsDragging(
-          true
-        );
-      }
-    };
-
-  const handleDragOver =
-    e => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-  const handleDragLeave =
-    e => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (
-        !dropZoneRef.current.contains(
-          e.relatedTarget
-        )
-      ) {
-        setIsDragging(
-          false
-        );
-      }
-    };
-
-  // ==========================================================
-  // 编辑区域更新
-  // ==========================================================
-
-  useEffect(() => {
-    if (
-      streamingStatus[
-        currentIndex
-      ]
-    ) {
+  const typewriterEffect = useCallback((fullText, index, shouldStream) => {
+    if (!shouldStream) {
+      setResults(prev => {
+        const updated = [...prev];
+        updated[index] = fullText;
+        return updated;
+      });
+      setStreamingStatus(prev => ({ ...prev, [index]: false }));
       return;
     }
-
-    const md =
-      results[
-        currentIndex
-      ] || '';
-
-    setEditText(
-      md
-    );
-
-    if (
-      editDivRef.current
-    ) {
-      if (
-        document.activeElement !==
-        editDivRef.current
-      ) {
-        const html =
-          marked.parse(
-            md,
-            {
-              breaks:
-                true
-            }
-          );
-
-        editDivRef.current.innerHTML =
-          DOMPurify.sanitize(
-            html
-          );
+    let pos = 0;
+    const speed = 15;
+    const step = Math.max(2, Math.ceil(fullText.length / 180));
+    const timer = setInterval(() => {
+      if (pos < fullText.length) {
+        pos += step;
+        const current = fullText.substring(0, pos);
+        setResults(prev => {
+          const updated = [...prev];
+          updated[index] = current;
+          return updated;
+        });
+      } else {
+        clearInterval(timer);
+        setStreamingStatus(prev => ({ ...prev, [index]: false }));
       }
+    }, speed);
+    return () => clearInterval(timer);
+  }, []);
+
+  const markComplete = useCallback((index) => {
+    if (!completedIndicesRef.current.has(index)) {
+      completedIndicesRef.current.add(index);
+      setCompletedCount(prev => prev + 1);
     }
-  }, [
-    currentIndex,
-    results,
-    streamingStatus
-  ]);
+  }, []);
 
-  // ==========================================================
-  // 复制
-  // ==========================================================
+  const handleFile = useCallback(async (file, index, isBatch = false) => {
+    if (!file.type.startsWith('image/')) return;
+    try {
+      setStreamingStatus(prev => ({ ...prev, [index]: true }));
+      setResults(prev => {
+        const newResults = [...prev];
+        newResults[index] = '';
+        return newResults;
+      });
+      setRouterResults(prev => {
+        const u = [...prev];
+        u[index] = null;
+        return u;
+      });
 
-  const handleCopyText =
-    () => {
-      if (
-        !editText ||
-        streamingStatus[
-          currentIndex
-        ]
-      ) {
-        return;
-      }
+      const imageData = await fileToBase64(file);
 
-      const plain =
-        editText
-          .replace(
-            /(\*\*|__)(.*?)\1/g,
-            '$2'
-          )
-          .replace(
-            /(\*|_)(.*?)\1/g,
-            '$2'
-          );
-
-      navigator.clipboard
-        .writeText(
-          plain.trim()
-        )
-        .then(
-          () => {
-            const btn =
-              document.querySelector(
-                '.copy-button'
-              );
-
-            if (btn) {
-              btn.textContent =
-                '已复制';
-
-              btn.classList.add(
-                'copied'
-              );
-
-              setTimeout(
-                () => {
-                  btn.textContent =
-                    '复制内容';
-
-                  btn.classList.remove(
-                    'copied'
-                  );
-                },
-                1500
-              );
+      // ===== 提前分类请求（仅 PaddleOCR-VL-1.5）—— 静默重试3次，5秒超时，失败时显示错误标签 =====
+      if (selectedModel.channel === 'silicon' && selectedModel.apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
+        const classifyWithRetry = async () => {
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              // 使用带超时的 fetch，5 秒后强制中断
+              const res = await fetchWithTimeout('/api/recognize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  imageData,
+                  mimeType: file.type,
+                  channel: 'silicon',
+                  apiName: 'PaddlePaddle/PaddleOCR-VL-1.5',
+                  classifyOnly: true,
+                }),
+              }, 5000); // 5秒超时
+              if (res.ok) {
+                const data = await res.json();
+                if (data.routerResult) {
+                  setRouterResults(prev => {
+                    const u = [...prev];
+                    u[index] = data.routerResult;
+                    return u;
+                  });
+                }
+                return; // 成功，停止重试
+              }
+              // 如果后端返回非 2xx，继续重试
+            } catch (err) {
+              console.error(`分类请求重试 ${attempt}/3 网络/其他错误`, err.message);
+            }
+            if (attempt < 3) {
+              await new Promise(r => setTimeout(r, 500));
             }
           }
-        )
-        .catch(
-          () =>
-            alert(
-              '复制失败'
-            )
-        );
-    };
+          // 3次全部失败，显示错误标签
+          setRouterResults(prev => {
+            const u = [...prev];
+            u[index] = '路由分类服务异常，使用默认OCR';
+            return u;
+          });
+        };
+        classifyWithRetry(); // 不 await，与识别请求并发
+      }
 
-  // ==========================================================
-  // 编辑内容
-  // ==========================================================
+      // ===== 正式识别请求（所有模型统一重试3次，30秒超时） =====
+      let response;
+      let lastError = null;
+      const maxRetries = 3;
 
-  const handleInput =
-    e => {
-      const html =
-        e.currentTarget
-          .innerHTML;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          if (attempt > 1) {
+            let reason = '服务请求异常';
+            const msg = lastError?.message || '';
+            if (msg.includes('fetch') || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+              reason = '网络连接异常';
+            } else if (msg.includes('状态码') || msg.includes('status') || msg.includes('503') || msg.includes('502') || msg.includes('504')) {
+              reason = '模型服务暂时不可用';
+            } else if (msg.includes('超时') || msg.includes('timeout')) {
+              reason = '请求超时';
+            } else if (msg.includes('环境变量')) {
+              reason = '服务配置错误';
+            }
 
-      const newMd =
-        turndownService.turndown(
-          html
-        );
+            setResults(prev => {
+              const updated = [...prev];
+              updated[index] = `>  **${reason}，将在 10 秒后自动重试（${attempt}/${maxRetries}）**\n>\n> <span class="breathe-ring"></span> **正在重试中...**`;
+              return updated;
+            });
+          }
+          let timeoutMs = 90000; // 硅基流动默认 90 秒
+          if (selectedModel.channel === 'baidu') {
+              timeoutMs = 120000; // 百度官方 120 秒
+          }
+          response = await fetchWithTimeout('/api/recognize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageData,
+              mimeType: file.type,
+              modelId: selectedModel.id,
+              channel: selectedModel.channel,
+              apiName: selectedModel.apiName
+            }),
+          }, timeoutMs);
 
-      setEditText(
-        newMd
-      );
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: '请求失败' }));
+            throw new Error(errorData.error || '服务异常');
+          }
 
-      setResults(
-        prev => {
-          const u =
-            [...prev];
+          break;
+        } catch (err) {
+          if (err.name === 'AbortError') {
+            lastError = new Error('请求超时，请检查网络连接');
+          } else {
+            lastError = err;
+          }
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 10000));
+          } else {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+      }
 
-          u[currentIndex] =
-            newMd;
+      if (!response || !response.ok) {
+        throw lastError || new Error('请求失败');
+      }
 
+      const data = await response.json();
+      const finalText = preprocessText(data.text || '');
+
+      setResultModels(prev => {
+        const updated = [...prev];
+        updated[index] = { channel: selectedModel.channel, name: selectedModel.name };
+        return updated;
+      });
+
+      // 如果识别响应也带有路由标签（例如提前分类请求失败但识别请求包含了结果），则更新
+      if (data.routerResult) {
+        setRouterResults(prev => {
+          const u = [...prev];
+          const current = u[index];
+          const normalTypes = ['表格', '公式', '纯文本'];
+          // 如果当前已经是正常类别，且新值不是正常类别，则不覆盖，保留正确结果
+          if (current && normalTypes.includes(current) && !normalTypes.includes(data.routerResult)) {
+            return u;
+          }
+          u[index] = data.routerResult;
           return u;
-        }
-      );
-    };
-
-  // ==========================================================
-  // 手动复制
-  // ==========================================================
-
-  const handleManualCopy =
-    e => {
-      e.preventDefault();
-
-      const sel =
-        window
-          .getSelection()
-          .toString();
-
-      const plain =
-        sel
-          .replace(
-            /(\*\*|__)(.*?)\1/g,
-            '$2'
-          )
-          .replace(
-            /(\*|_)(.*?)\1/g,
-            '$2'
-          );
-
-      e.clipboardData.setData(
-        'text/plain',
-        plain
-      );
-    };
-
-  // ==========================================================
-  // 图片拖动 / 缩放
-  // ==========================================================
-
-  useEffect(() => {
-    const move =
-      e => {
-        if (
-          !isDraggingModal
-        ) {
-          return;
-        }
-
-        const clientX =
-          e.touches?.[0]
-            ?.clientX ??
-          e.clientX;
-
-        const clientY =
-          e.touches?.[0]
-            ?.clientY ??
-          e.clientY;
-
-        setModalPosition({
-          x:
-            clientX -
-            modalOffset.x,
-          y:
-            clientY -
-            modalOffset.y
         });
-      };
+      }
 
-    const end =
-      () =>
-        setIsDraggingModal(
-          false
-        );
+      typewriterEffect(finalText, index, !isBatch);
+      markComplete(index);
 
-    if (
-      isDraggingModal
-    ) {
-      window.addEventListener(
-        'mousemove',
-        move
-      );
-
-      window.addEventListener(
-        'mouseup',
-        end
-      );
-
-      window.addEventListener(
-        'touchmove',
-        move,
-        {
-          passive:
-            false
-        }
-      );
-
-      window.addEventListener(
-        'touchend',
-        end
-      );
+    } catch (error) {
+      console.error('识别失败:', error);
+      let errMsg;
+      if (error.name === 'AbortError' || error.message.includes('超时')) {
+        errMsg = '> ⚠️ **系统提示：请求超时，请检查网络连接**';
+      } else {
+        errMsg = `> ⚠️ **系统提示：图片处理失败**\n>\n> ${error.message}`;
+      }
+      setResults(prev => {
+        const updated = [...prev];
+        updated[index] = errMsg;
+        return updated;
+      });
+      setStreamingStatus(prev => ({ ...prev, [index]: false }));
+      markComplete(index);
     }
+  }, [typewriterEffect, selectedModel, markComplete]);
 
-    return () => {
-      window.removeEventListener(
-        'mousemove',
-        move
-      );
-
-      window.removeEventListener(
-        'mouseup',
-        end
-      );
-
-      window.removeEventListener(
-        'touchmove',
-        move
-      );
-
-      window.removeEventListener(
-        'touchend',
-        end
-      );
-    };
-  }, [
-    isDraggingModal,
-    modalOffset
-  ]);
-
-  const handleModalMouseDown =
-    e => {
-      if (
-        e.target.classList.contains(
-          'modal-close'
-        ) ||
-        e.button !== 0
-      ) {
+  const processFiles = useCallback(async (files) => {
+    setIsLoading(true);
+    try {
+      const expandedFiles = [];
+      for (const file of files) {
+        if (file.type === 'application/pdf') {
+          try {
+            const pdfImages = await pdfToImages(file);
+            expandedFiles.push(...pdfImages);
+          } catch (err) {
+            console.error('PDF 转换失败:', err);
+            alert('PDF 处理失败：' + err.message);
+          }
+        } else if (file.type.startsWith('image/')) {
+          expandedFiles.push(file);
+        }
+      }
+      if (expandedFiles.length === 0) {
+        alert('没有可处理的文件（仅支持图片和 PDF）');
+        setIsLoading(false);
         return;
       }
+      const startIdx = images.length;
+      const urls = expandedFiles.map(f => URL.createObjectURL(f));
+      setImages(prev => [...prev, ...urls]);
+      setResults(prev => [...prev, ...new Array(expandedFiles.length).fill('')]);
+      setResultModels(prev => [...prev, ...new Array(expandedFiles.length).fill(null)]);
+      setRouterResults(prev => [...prev, ...new Array(expandedFiles.length).fill(null)]);
+      setCurrentIndex(startIdx);
+      setIsLoading(false);
+      const isBatch = expandedFiles.length > 1;
+      await concurrentProcess(expandedFiles, (file, fileIdx) => handleFile(file, startIdx + fileIdx, isBatch), 2);
+    } catch (err) {
+      alert('处理文件时出错：' + err.message);
+      setIsLoading(false);
+    }
+  }, [images.length, handleFile]);
 
-      const clientX =
-        e.touches?.[0]
-          ?.clientX ??
-        e.clientX;
-
-      const clientY =
-        e.touches?.[0]
-          ?.clientY ??
-        e.clientY;
-
-      setIsDraggingModal(
-        true
-      );
-
-      setModalOffset({
-        x:
-          clientX -
-          modalPosition.x,
-
-        y:
-          clientY -
-          modalPosition.y
-      });
-    };
-
-  const handleModalWheel =
-    e => {
+  useEffect(() => {
+    const handlePaste = async (e) => {
+      if (editDivRef.current?.contains(e.target) || showModal) return;
       e.preventDefault();
-
-      const delta =
-        -e.deltaY *
-        0.0005 *
-        modalScale;
-
-      setModalScale(
-        prev =>
-          Math.max(
-            0.1,
-            Math.min(
-              10,
-              prev + delta
-            )
-          )
-      );
+      const items = Array.from(e.clipboardData.items);
+      const newFiles = [];
+      for (const item of items) {
+        if (item.type.startsWith('image/') || item.type === 'application/pdf') {
+          const file = item.getAsFile();
+          if (file) newFiles.push(file);
+        } else if (item.type === 'text/plain') {
+          item.getAsString((text) => {
+            if (text.match(/https?:\/\//i)) {
+              setImageUrl(text);
+              setShowUrlInput(true);
+            }
+          });
+        }
+      }
+      if (newFiles.length > 0) {
+        processFiles(newFiles);
+      }
     };
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [processFiles, showModal]);
 
-  // ==========================================================
-  // 页面状态
-  // ==========================================================
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    await processFiles(files);
+    if (e.target) e.target.value = null;
+  };
 
-  const modelInfoText =
-    resultModels[
-      currentIndex
-    ]
-      ? `（${
-          resultModels[
-            currentIndex
-          ].channel ===
-          'baidu'
-            ? '百度'
-            : '硅基流动'
-        } · ${
-          resultModels[
-            currentIndex
-          ].name
-        }）`
-      : '';
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    setIsDraggingGlobal(false);
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.type === 'application/pdf');
+    if (!files.length) {
+      const items = Array.from(e.dataTransfer.items);
+      const urls = await Promise.all(items.filter(i => i.kind === 'string' && (i.type === 'text/uri-list' || i.type === 'text/plain')).map(i => new Promise(res => i.getAsString(res))));
+      const imgUrl = urls.find(u => u?.match(/\.(jpg|jpeg|png|gif|webp|avif)(\?.*)?$/i));
+      if (imgUrl) { setImageUrl(imgUrl); setShowUrlInput(true); }
+      return;
+    }
+    processFiles(files);
+  };
 
-  const currentIsStreaming =
-    streamingStatus[
-      currentIndex
-    ] || false;
-
-  const showResultsSection =
-    images.length > 0 ||
-    isLoading ||
-    Object.values(
-      streamingStatus
-    ).some(
-      v => v
-    );
-
-  // ==========================================================
-  // 当前图片状态
-  // ==========================================================
-
-  const getCurrentImageStatus =
-    () => {
-      if (
-        streamingStatus[
-          currentIndex
-        ]
-      ) {
-        return {
-          text:
-            '识别中',
-          className:
-            'status-streaming'
-        };
+  const handleUrlSubmit = async (e) => {
+    e.preventDefault();
+    if (!imageUrl) return;
+    setIsLoading(true);
+    setShowUrlInput(false);
+    try {
+      let blob;
+      try {
+        const res = await fetch(imageUrl, { signal: AbortSignal.timeout(10000) });
+        if (!res.ok) throw new Error();
+        blob = await res.blob();
+      } catch {
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
+        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
+        if (!res.ok) throw new Error();
+        blob = await res.blob();
       }
+      const file = new File([blob], 'url_image.jpg', { type: blob.type });
+      await processFiles([file]);
+      setImageUrl('');
+    } catch (err) {
+      alert(`无法加载图片: ${err.message}`);
+      setShowUrlInput(true);
+      setIsLoading(false);
+    }
+  };
 
-      if (
-        results[
-          currentIndex
-        ] &&
-        results[
-          currentIndex
-        ].trim().length >
-          0
-      ) {
-        return {
-          text:
-            '已完成',
-          className:
-            'status-completed'
-        };
-      }
+  const handlePrevImage = () => {
+    if (currentIndex > 0 && !isLoading) setCurrentIndex(currentIndex - 1);
+  };
+  const handleNextImage = () => {
+    if (currentIndex < images.length - 1 && !isLoading) setCurrentIndex(currentIndex + 1);
+  };
 
-      if (
-        results[
-          currentIndex
-        ] === '' &&
-        !streamingStatus[
-          currentIndex
-        ]
-      ) {
-        return {
-          text:
-            '等待中',
-          className:
-            'status-pending'
-        };
-      }
-
-      return {
-        text:
-          '未开始',
-        className:
-          'status-pending'
-      };
+  useEffect(() => {
+    const dragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer?.types.includes('Files')) setIsDraggingGlobal(true); };
+    const dragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
+    const dragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!e.relatedTarget || e.relatedTarget === document.documentElement) { setIsDraggingGlobal(false); setIsDragging(false); } };
+    const drop = (e) => { e.preventDefault(); e.stopPropagation(); if (dropZoneRef.current && !dropZoneRef.current.contains(e.target)) { setIsDraggingGlobal(false); setIsDragging(false); } };
+    window.addEventListener('dragenter', dragEnter);
+    window.addEventListener('dragover', dragOver);
+    window.addEventListener('dragleave', dragLeave);
+    window.addEventListener('drop', drop);
+    return () => {
+      window.removeEventListener('dragenter', dragEnter);
+      window.removeEventListener('dragover', dragOver);
+      window.removeEventListener('dragleave', dragLeave);
+      window.removeEventListener('drop', drop);
     };
+  }, []);
 
-  const currentStatus =
-    getCurrentImageStatus();
+  const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer.types.includes('Files')) setIsDragging(true); };
+  const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
+  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); if (!dropZoneRef.current.contains(e.relatedTarget)) setIsDragging(false); };
 
-  // ==========================================================
-  // Render
-  // ==========================================================
+  useEffect(() => {
+    if (streamingStatus[currentIndex]) return;
+    const md = results[currentIndex] || '';
+    setEditText(md);
+    if (editDivRef.current) {
+      if (document.activeElement !== editDivRef.current) {
+        const html = marked.parse(md, { breaks: true });
+        editDivRef.current.innerHTML = DOMPurify.sanitize(html);
+      }
+    }
+  }, [currentIndex, results, streamingStatus]);
+
+  const handleCopyText = () => {
+    if (!editText || streamingStatus[currentIndex]) return;
+    const plain = editText.replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(\*|_)(.*?)\1/g, '$2');
+    navigator.clipboard.writeText(plain.trim()).then(() => {
+      const btn = document.querySelector('.copy-button');
+      if (btn) { btn.textContent = '已复制'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = '复制内容'; btn.classList.remove('copied'); }, 1500); }
+    }).catch(() => alert('复制失败'));
+  };
+
+  const handleInput = (e) => {
+    const html = e.currentTarget.innerHTML;
+    const newMd = turndownService.turndown(html);
+    setEditText(newMd);
+    setResults(prev => { const u = [...prev]; u[currentIndex] = newMd; return u; });
+  };
+
+  const handleManualCopy = (e) => {
+    e.preventDefault();
+    const sel = window.getSelection().toString();
+    const plain = sel.replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(\*|_)(.*?)\1/g, '$2');
+    e.clipboardData.setData('text/plain', plain);
+  };
+
+  useEffect(() => {
+    const move = (e) => {
+      if (!isDraggingModal) return;
+      const clientX = e.touches?.[0]?.clientX ?? e.clientX;
+      const clientY = e.touches?.[0]?.clientY ?? e.clientY;
+      setModalPosition({ x: clientX - modalOffset.x, y: clientY - modalOffset.y });
+    };
+    const end = () => setIsDraggingModal(false);
+    if (isDraggingModal) {
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', end);
+      window.addEventListener('touchmove', move, { passive: false });
+      window.addEventListener('touchend', end);
+    }
+    return () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', end);
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('touchend', end);
+    };
+  }, [isDraggingModal, modalOffset]);
+
+  const handleModalMouseDown = (e) => {
+    if (e.target.classList.contains('modal-close') || e.button !== 0) return;
+    const clientX = e.touches?.[0]?.clientX ?? e.clientX;
+    const clientY = e.touches?.[0]?.clientY ?? e.clientY;
+    setIsDraggingModal(true);
+    setModalOffset({ x: clientX - modalPosition.x, y: clientY - modalPosition.y });
+  };
+  const handleModalWheel = (e) => {
+    e.preventDefault();
+    const delta = -e.deltaY * 0.0005 * modalScale;
+    setModalScale(prev => Math.max(0.1, Math.min(10, prev + delta)));
+  };
+
+  const modelInfoText = resultModels[currentIndex]
+    ? `（${resultModels[currentIndex].channel === 'baidu' ? '百度' : '硅基流动'} · ${resultModels[currentIndex].name}）`
+    : '';
+  const currentIsStreaming = streamingStatus[currentIndex] || false;
+  const showResultsSection = isLoading || results.some(r => r && r !== '') || Object.values(streamingStatus).some(v => v);
+
+  const getCurrentImageStatus = () => {
+    if (streamingStatus[currentIndex]) return { text: '识别中', className: 'status-streaming' };
+    if (results[currentIndex] && results[currentIndex].trim().length > 0) return { text: '已完成', className: 'status-completed' };
+    if (results[currentIndex] === '' && !streamingStatus[currentIndex]) return { text: '等待中', className: 'status-pending' };
+    return { text: '未开始', className: 'status-pending' };
+  };
+  const currentStatus = getCurrentImageStatus();
 
   return (
     <div className="app">
-
-      <div
-        style={{
-          display:
-            'none'
-        }}
-      >
-        {MODELS.map(
-          m =>
-            m.badge && (
-              <img
-                key={`preload-${m.id}`}
-                src={
-                  m.badge
-                }
-                alt="preload"
-              />
-            )
-        )}
+      <div style={{ display: 'none' }}>
+        {MODELS.map(m => m.badge && <img key={`preload-${m.id}`} src={m.badge} alt="preload" />)}
       </div>
-
-      {/* =======================================================
-          Header
-      ======================================================== */}
-
       <header>
-
-        <a
-          href="https://github.com/kayaladream/PaddleOCR"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="github-link"
-          title="在 GitHub 上查看源码"
-        >
-          <svg
-            height="32"
-            aria-hidden="true"
-            viewBox="0 0 16 16"
-            version="1.1"
-            width="32"
-          >
-            <path
-              fillRule="evenodd"
-              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63 0 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
-            />
+        <a href="https://github.com/kayaladream/PaddleOCR" target="_blank" rel="noopener noreferrer" className="github-link" title="在 GitHub 上查看源码">
+          <svg height="32" aria-hidden="true" viewBox="0 0 16 16" version="1.1" width="32">
+            <path fillRule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
           </svg>
         </a>
-
-        <h1>
-          文档解析的事，交给PaddleOCR
-        </h1>
-
+        <h1>文档解析的事，交给PaddleOCR</h1>
         <p>
-          <b>
-            基于PaddleOCR-VL API的智能文字识别解决方案，可精准识别多语言文字、表格等。
-          </b>
-
+          <b>基于PaddleOCR-VL API的智能文字识别解决方案，可精准识别多语言文字、表格等。</b>
           <br />
-
           识别出的表格复制至 Excel 即可保留格式使用，公式源码可复制到
-
-          <a
-            href="https://stackedit.io/app#"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              color:
-                '#1233E0',
-              textDecoration:
-                'underline',
-              fontWeight:
-                '500',
-              marginLeft:
-                '4px',
-              marginRight:
-                '4px'
-            }}
-          >
-            这里
-          </a>
-
+          <a href="https://stackedit.io/app#" target="_blank" rel="noopener noreferrer" style={{ color: '#1233E0', textDecoration: 'underline', fontWeight: '500', marginLeft: '4px', marginRight: '4px' }}>这里</a>
           预览渲染效果。
         </p>
       </header>
-
-      {/* =======================================================
-          Main
-      ======================================================== */}
-
-      <main
-        className={
-          images.length >
-          0
-            ? 'has-content'
-            : ''
-        }
-      >
-
-        <div
-          className={`upload-section ${
-            images.length >
-            0
-              ? 'with-image'
-              : ''
-          }`}
-        >
-
-          {/* =====================================================
-              Upload Zone
-          ====================================================== */}
-
+      <main className={images.length > 0 ? 'has-content' : ''}>
+        <div className={`upload-section ${images.length > 0 ? 'with-image' : ''}`}>
           <div
-            ref={
-              dropZoneRef
-            }
-            className={`upload-zone ${
-              isDragging
-                ? 'dragging'
-                : ''
-            }`}
-            onDragEnter={
-              handleDragEnter
-            }
-            onDragOver={
-              handleDragOver
-            }
-            onDragLeave={
-              handleDragLeave
-            }
-            onDrop={
-              handleDrop
-            }
+            ref={dropZoneRef}
+            className={`upload-zone ${isDragging ? 'dragging' : ''}`}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
             aria-label="文件上传区域"
           >
-
             <div className="upload-container">
-
-              <label
-                className="upload-button"
-                htmlFor="file-input"
-              >
-                {
-                  images.length >
-                  0
-                    ? '添加新的图片/PDF'
-                    : '上传图片/PDF'
-                }
+              <label className="upload-button" htmlFor="file-input">
+                {images.length > 0 ? '添加新的图片/PDF' : '上传图片/PDF'}
               </label>
-
-              <input
-                id="file-input"
-                type="file"
-                accept="image/*,application/pdf"
-                onChange={
-                  handleImageUpload
-                }
-                multiple
-                hidden
-              />
-
-              <button
-                type="button"
-                className="url-button"
-                onClick={() =>
-                  setShowUrlInput(
-                    !showUrlInput
-                  )
-                }
-              >
-                {
-                  showUrlInput
-                    ? '取消链接输入'
-                    : '使用链接上传'
-                }
+              <input id="file-input" type="file" accept="image/*,application/pdf" onChange={handleImageUpload} multiple hidden />
+              <button type="button" className="url-button" onClick={() => setShowUrlInput(!showUrlInput)}>
+                {showUrlInput ? '取消链接输入' : '使用链接上传'}
               </button>
-
             </div>
-
-            {/* URL 上传 */}
-
             {showUrlInput && (
-              <form
-                onSubmit={
-                  handleUrlSubmit
-                }
-                className="url-form"
-              >
-                <input
-                  type="url"
-                  value={
-                    imageUrl
-                  }
-                  onChange={
-                    e =>
-                      setImageUrl(
-                        e.target
-                          .value
-                      )
-                  }
-                  placeholder="粘贴图片链接 (URL)"
-                  className="url-input"
-                  required
-                />
-
-                <button
-                  type="submit"
-                  className="url-submit"
-                >
-                  确认
-                </button>
+              <form onSubmit={handleUrlSubmit} className="url-form">
+                <input type="url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="粘贴图片链接 (URL)" className="url-input" required />
+                <button type="submit" className="url-submit">确认</button>
               </form>
             )}
-
-            {!images.length &&
-              !isDragging &&
-              !showUrlInput && (
-                <p className="upload-hint">
-                  或将图片/PDF拖放到此处 / 粘贴图片
-                </p>
-              )}
-
-            {/* ===================================================
-                模型选择
-            ==================================================== */}
-
+            {!images.length && !isDragging && !showUrlInput && <p className="upload-hint">或将图片/PDF拖放到此处 / 粘贴图片</p>}
             <div className="model-selector-container">
-
-              <div
-                className="model-selector-wrapper"
-                ref={
-                  dropdownRef
-                }
-              >
-
-                <span className="model-label-outside">
-                  选择模型
-                </span>
-
-                <div
-                  className="model-selector"
-                  onClick={e => {
-                    e.stopPropagation();
-
-                    setShowDropdown(
-                      !showDropdown
-                    );
-                  }}
-                >
-
+              <div className="model-selector-wrapper" ref={dropdownRef}>
+                <span className="model-label-outside">选择模型</span>
+                <div className="model-selector" onClick={(e) => { e.stopPropagation(); setShowDropdown(!showDropdown); }}>
                   <div className="model-selector-header">
-
-                    <span className="model-current-name">
-                      {
-                        selectedModel.name
-                      }
-                    </span>
-
-                    {selectedModel.badge && (
-                      <img
-                        src={
-                          selectedModel.badge
-                        }
-                        alt="badge"
-                        className="model-badge"
-                      />
-                    )}
-
-                    <span
-                      className="model-arrow"
-                      style={{
-                        transform:
-                          showDropdown
-                            ? 'rotate(180deg)'
-                            : 'rotate(0deg)'
-                      }}
-                    >
-                      ▼
-                    </span>
-
+                    <span className="model-current-name">{selectedModel.name}</span>
+                    {selectedModel.badge && <img src={selectedModel.badge} alt="badge" className="model-badge" />}
+                    <span className="model-arrow" style={{ transform: showDropdown ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
                   </div>
-
                 </div>
-
-                {/* 下拉菜单 */}
-
                 {showDropdown && (
                   <div className="model-dropdown-list">
-
-                    {MODELS.map(
-                      model => (
-                        <div
-                          key={
-                            model.id
-                          }
-                          className="model-dropdown-item"
-                          onClick={e => {
-                            e.stopPropagation();
-
-                            setSelectedModel(
-                              model
-                            );
-
-                            setShowDropdown(
-                              false
-                            );
-                          }}
-                        >
-
-                          <div className="model-item-top">
-
-                            <span className="model-item-name">
-                              {
-                                model.name
-                              }
-                            </span>
-
-                            {model.badge && (
-                              <img
-                                src={
-                                  model.badge
-                                }
-                                alt="badge"
-                                className="model-item-badge"
-                              />
-                            )}
-
-                          </div>
-
-                          <div className="model-item-desc">
-                            {
-                              model.desc
-                            }
-                          </div>
-
+                    {MODELS.map(model => (
+                      <div
+                        key={model.id}
+                        className="model-dropdown-item"
+                        onClick={(e) => { e.stopPropagation(); setSelectedModel(model); setShowDropdown(false); }}
+                      >
+                        <div className="model-item-top">
+                          <span className="model-item-name">{model.name}</span>
+                          {model.badge && <img src={model.badge} alt="badge" className="model-item-badge" />}
                         </div>
-                      )
-                    )}
-
+                        <div className="model-item-desc">{model.desc}</div>
+                      </div>
+                    ))}
                   </div>
                 )}
-
               </div>
-
             </div>
-
-            {isDragging && (
-              <div className="dragging-overlay-text">
-                松开即可上传文件
-              </div>
-            )}
-
+            {isDragging && <div className="dragging-overlay-text">松开即可上传文件</div>}
           </div>
-
-          {/* 全局拖拽蒙层 */}
-
-          {isDraggingGlobal && (
-            <div className="drag-overlay active"></div>
-          )}
-
-          {/* =====================================================
-              图片预览
-          ====================================================== */}
-
-          {images.length >
-            0 && (
+          {isDraggingGlobal && <div className="drag-overlay active"></div>}
+          {images.length > 0 && (
             <div className="images-preview">
-
               <div className="image-navigation">
-
-                <button
-                  onClick={
-                    handlePrevImage
-                  }
-                  disabled={
-                    currentIndex ===
-                      0 ||
-                    isLoading
-                  }
-                  className="nav-button"
-                >
-                  ←
-                </button>
-
-                <span className="image-counter">
-                  {
-                    currentIndex +
-                    1
-                  } / {images.length}
-                </span>
-
-                <button
-                  onClick={
-                    handleNextImage
-                  }
-                  disabled={
-                    currentIndex ===
-                      images.length -
-                        1 ||
-                    isLoading
-                  }
-                  className="nav-button"
-                >
-                  →
-                </button>
-
-                <span className="progress-indicator">
-                  识别进度: {
-                    completedCount
-                  } / {
-                    images.length
-                  }
-                </span>
-
+                <button onClick={handlePrevImage} disabled={currentIndex === 0 || isLoading} className="nav-button">←</button>
+                <span className="image-counter">{currentIndex + 1} / {images.length}</span>
+                <button onClick={handleNextImage} disabled={currentIndex === images.length - 1 || isLoading} className="nav-button">→</button>
+                <span className="progress-indicator">识别进度: {completedCount} / {images.length}</span>
               </div>
-
-              <div
-                className={`image-preview ${
-                  isLoading &&
-                  !results[
-                    currentIndex
-                  ]
-                    ? 'loading'
-                    : ''
-                }`}
-              >
-
+              <div className={`image-preview ${isLoading && !results[currentIndex] ? 'loading' : ''}`}>
                 <img
-                  key={
-                    images[
-                      currentIndex
-                    ]
-                  }
-                  src={
-                    images[
-                      currentIndex
-                    ]
-                  }
-                  alt={`预览 ${
-                    currentIndex +
-                    1
-                  }`}
-                  onClick={() => {
-                    if (
-                      images[
-                        currentIndex
-                      ]
-                    ) {
-                      setModalPosition(
-                        {
-                          x: 0,
-                          y: 0
-                        }
-                      );
-
-                      setModalScale(
-                        1
-                      );
-
-                      setShowModal(
-                        true
-                      );
-                    }
-                  }}
-                  style={{
-                    cursor:
-                      images[
-                        currentIndex
-                      ]
-                        ? 'zoom-in'
-                        : 'default'
-                  }}
-                  onError={e => {
-                    console.error(
-                      '加载图片失败:',
-                      images[
-                        currentIndex
-                      ]
-                    );
-
-                    e.target.alt =
-                      '图片加载失败';
-
-                    e.target.style.display =
-                      'none';
-
-                    e.target
-                      .closest(
-                        '.image-preview'
-                      )
-                      ?.classList.add(
-                        'load-error'
-                      );
-                  }}
+                  key={images[currentIndex]}
+                  src={images[currentIndex]}
+                  alt={`预览 ${currentIndex + 1}`}
+                  onClick={() => { if (images[currentIndex]) { setModalPosition({ x: 0, y: 0 }); setModalScale(1); setShowModal(true); } }}
+                  style={{ cursor: images[currentIndex] ? 'zoom-in' : 'default' }}
+                  onError={(e) => { console.error("加载图片失败:", images[currentIndex]); e.target.alt = '图片加载失败'; e.target.style.display = 'none'; e.target.closest('.image-preview')?.classList.add('load-error'); }}
                 />
-
-                {/* 图片状态 */}
-
-                {images[
-                  currentIndex
-                ] && (
-                  <div
-                    className={`image-status-badge ${currentStatus.className}`}
-                  >
-                    {
-                      currentStatus.text
-                    }
+                {images[currentIndex] && (
+                  <div className={`image-status-badge ${currentStatus.className}`}>
+                    {currentStatus.text}
                   </div>
                 )}
-
-                {/* 路由器状态 */}
-
-                {routerResults[
-                  currentIndex
-                ] && (
+                {routerResults[currentIndex] && (
                   <div className="router-info-badge">
-                    {
-                      [
-                        '表格',
-                        '公式',
-                        '纯文本'
-                      ].includes(
-                        routerResults[
-                          currentIndex
-                        ]
-                      )
-                        ? '路由器检测为：'
-                        : ''
-                    }
-
-                    {
-                      routerResults[
-                        currentIndex
-                      ]
-                    }
+                    {['表格', '公式', '纯文本'].includes(routerResults[currentIndex]) ? '路由器检测为：' : ''}
+                    {routerResults[currentIndex]}
                   </div>
                 )}
-
               </div>
             </div>
           )}
-
         </div>
-
-        {/* =======================================================
-            结果区域
-        ======================================================== */}
-
         {showResultsSection && (
           <div className="result-section">
-
-            <div className="result-container">
-
-              {isLoading &&
-                !currentIsStreaming &&
-                results[
-                  currentIndex
-                ] == null && (
-                  <div className="loading result-loading">
-                    等待识别...
-                  </div>
-                )}
-
-              {/* =================================================
-                  识别中
-              ================================================== */}
-
-              {currentIsStreaming && (
-                <div className="result-text">
-
-                  <div className="result-header">
-                    <span>
-                      第 {
-                        currentIndex +
-                        1
-                      } 张图片的识别结果 (识别中...)
-                      {
-                        modelInfoText
-                      }
-                    </span>
-                  </div>
-
-                  <div className="gradient-text">
-
-                    <ReactMarkdown
-                      remarkPlugins={[
-                        remarkMath
-                      ]}
-                      rehypePlugins={[
-                        rehypeKatex,
-                        rehypeRaw
-                      ]}
-                      components={{
-                        table:
-                          ({
-                            node,
-                            ...props
-                          }) => (
-                            <div
-                              style={{
-                                overflowX:
-                                  'auto',
-                                maxWidth:
-                                  '100%'
-                              }}
-                            >
-                              <table
-                                className="markdown-table"
-                                {...props}
-                              />
-                            </div>
-                          ),
-
-                        th:
-                          ({
-                            node,
-                            ...props
-                          }) => (
-                            <th
-                              className="markdown-th"
-                              {...props}
-                            />
-                          ),
-
-                        td:
-                          ({
-                            node,
-                            ...props
-                          }) => (
-                            <td
-                              className="markdown-td"
-                              {...props}
-                            />
-                          )
-                      }}
-                    >
-                      {
-                        results[
-                          currentIndex
-                        ] || ''
-                      }
-                    </ReactMarkdown>
-
-                  </div>
-
-                </div>
-              )}
-
-              {/* =================================================
-                  已完成，可编辑
-              ================================================== */}
-
-              {!currentIsStreaming &&
-                results[
-                  currentIndex
-                ] != null && (
-                  <div className="result-text editing-area">
-
-                    <div className="result-header">
-
-                      <span>
-                        编辑第 {
-                          currentIndex +
-                          1
-                        } 张图片的结果
-                        {
-                          modelInfoText
-                        }
-                      </span>
-
-                      <button
-                        className="copy-button"
-                        onClick={
-                          handleCopyText
-                        }
+            {/* 加载中且无结果时：只显示纯文字，不带背景容器 */}
+            {isLoading && !currentIsStreaming && results[currentIndex] == null ? (
+              <div className="loading result-loading" style={{
+                background: 'none',
+                border: 'none',
+                boxShadow: 'none',
+                padding: '2rem 0',
+                textAlign: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4em'
+              }}>
+                <span className="breathe-ring" style={{
+                  width: '0.75em',
+                  height: '0.75em',
+                  borderWidth: '0.12em'
+                }}></span> 等待识别...
+              </div>
+            ) : (
+              <div className="result-container">
+                {currentIsStreaming && (
+                  <div className="result-text">
+                    <div className="result-header"><span>第 {currentIndex + 1} 张图片的识别结果 (识别中...) {modelInfoText}</span></div>
+                    <div className="gradient-text">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkMath]}
+                        rehypePlugins={[rehypeKatex, rehypeRaw]}
+                        components={{
+                          table: ({node, ...props}) => (<div style={{overflowX:'auto', maxWidth:'100%'}}><table className="markdown-table" {...props} /></div>),
+                          th: ({node, ...props}) => <th className="markdown-th" {...props} />,
+                          td: ({node, ...props}) => <td className="markdown-td" {...props} />,
+                        }}
                       >
-                        复制内容
-                      </button>
-
+                        {results[currentIndex] || ''}
+                      </ReactMarkdown>
                     </div>
-
-                    <div
-                      ref={
-                        editDivRef
-                      }
-                      contentEditable={
-                        true
-                      }
-                      className="edit-content-editable"
-                      onInput={
-                        handleInput
-                      }
-                      onCopy={
-                        handleManualCopy
-                      }
-                      suppressContentEditableWarning={
-                        true
-                      }
-                      aria-label={`编辑识别结果 ${
-                        currentIndex +
-                        1
-                      }`}
-                      spellCheck="false"
-                    />
-
                   </div>
                 )}
-
-              {/* =================================================
-                  异常状态
-              ================================================== */}
-
-              {!isLoading &&
-                !currentIsStreaming &&
-                results[
-                  currentIndex
-                ] == null &&
-                images.length >
-                  0 && (
+                {!currentIsStreaming && results[currentIndex] != null && (
+                  <div className="result-text editing-area">
+                    <div className="result-header">
+                      <span>编辑第 {currentIndex + 1} 张图片的结果 {modelInfoText}</span>
+                      <button className="copy-button" onClick={handleCopyText}>复制内容</button>
+                    </div>
+                    <div ref={editDivRef} contentEditable={true} className="edit-content-editable" onInput={handleInput} onCopy={handleManualCopy}
+                         suppressContentEditableWarning={true} aria-label={`编辑识别结果 ${currentIndex + 1}`} spellCheck="false" />
+                  </div>
+                )}
+                {!isLoading && !currentIsStreaming && results[currentIndex] == null && images.length > 0 && (
                   <div className="result-placeholder">
-
-                    <span
-                      style={{
-                        fontWeight:
-                          'bold'
-                      }}
-                    >
-                      ⚠️ 系统提示
-                    </span>
-
-                    <br />
-                    <br />
-
-                    当前图片状态异常，暂无识别结果或由于网络中断导致失败，请尝试重新点击上传。
-
+                    <span style={{fontWeight:'bold'}}>⚠️ 系统提示</span><br /><br />当前图片状态异常，暂无识别结果或由于网络中断导致失败，请尝试重新点击上传。
                   </div>
                 )}
-
-            </div>
-
+              </div>
+            )}
           </div>
         )}
-
       </main>
-
-      {/* =======================================================
-          图片放大 Modal
-      ======================================================== */}
-
-      {showModal &&
-        images[
-          currentIndex
-        ] && (
-          <div className="modal-overlay">
-
-            <div
-              className="modal-content"
-              onMouseDown={
-                handleModalMouseDown
-              }
-              onWheel={
-                handleModalWheel
-              }
-              onTouchStart={
-                handleModalMouseDown
-              }
-              style={{
-                transform:
-                  `translate(${modalPosition.x}px, ${modalPosition.y}px) scale(${modalScale})`,
-
-                cursor:
-                  isDraggingModal
-                    ? 'grabbing'
-                    : 'grab',
-
-                transition:
-                  isDraggingModal
-                    ? 'none'
-                    : 'transform 0.1s ease-out',
-
-                touchAction:
-                  'none',
-
-                userSelect:
-                  'none'
-              }}
-            >
-
-              <img
-                src={
-                  images[
-                    currentIndex
-                  ]
-                }
-                alt="放大预览"
-                draggable="false"
-                style={{
-                  pointerEvents:
-                    'none',
-                  userSelect:
-                    'none'
-                }}
-              />
-
-              <button
-                className="modal-close"
-                onClick={() =>
-                  setShowModal(
-                    false
-                  )
-                }
-                onMouseDown={e =>
-                  e.stopPropagation()
-                }
-              >
-                ×
-              </button>
-
-            </div>
-
+      {showModal && images[currentIndex] && (
+        <div className="modal-overlay">
+          <div
+            className="modal-content"
+            onMouseDown={handleModalMouseDown}
+            onWheel={handleModalWheel}
+            onTouchStart={handleModalMouseDown}
+            style={{
+              transform: `translate(${modalPosition.x}px, ${modalPosition.y}px) scale(${modalScale})`,
+              cursor: isDraggingModal ? 'grabbing' : 'grab',
+              transition: isDraggingModal ? 'none' : 'transform 0.1s ease-out',
+              touchAction: 'none',
+              userSelect: 'none',
+            }}
+          >
+            <img src={images[currentIndex]} alt="放大预览" draggable="false" style={{ pointerEvents: 'none', userSelect: 'none' }} />
+            <button className="modal-close" onClick={() => setShowModal(false)} onMouseDown={(e) => e.stopPropagation()}>×</button>
           </div>
-        )}
-
+        </div>
+      )}
     </div>
   );
 }
