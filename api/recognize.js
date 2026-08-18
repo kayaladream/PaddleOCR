@@ -1,10 +1,8 @@
 // api/recognize.js
-export const maxDuration = 330; // 防止 Vercel 免费版过早超时断开
+export const maxDuration = 60; 
 
 function parseOtslToHtml(text) {
-  if (!text.includes('<nl>') && !text.includes('<fcel>')) {
-    return text;
-  }
+  if (!text.includes('<nl>') && !text.includes('<fcel>')) return text;
   try {
     let html = '<table class="markdown-table" style="border-collapse: collapse;" border="1"><tbody>\n';
     const rows = text.split('<nl>').filter(r => r.trim() !== '');
@@ -26,7 +24,6 @@ function parseOtslToHtml(text) {
     html += '</tbody></table>\n\n';
     return html;
   } catch (err) {
-    console.error("OTSL 解析为 HTML 失败:", err);
     return text;
   }
 }
@@ -35,196 +32,122 @@ async function autoDetectPrompt(imageData, mimeType, token) {
   try {
     const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'Qwen/Qwen3-VL-32B-Instruct',
         messages: [{
           role: 'user',
           content: [
             { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageData}` } },
-            { type: 'text', text: '请判断这张图片的主要核心内容属于哪一类：\nA. 纯文字\nB. 表格\nC. 数学公式\n你只能输出一个大写字母，不要包含任何标点符号和多余废话。' }
+            { type: 'text', text: '请判断这张图片的主要核心内容属于哪一类：\nA. 纯文字\nB. 表格\nC. 数学公式\n你只能输出一个大写字母，不要包含任何标点符号。' }
           ]
         }],
-        max_tokens: 5,
-        temperature: 0.1,
+        max_tokens: 5, temperature: 0.1,
       }),
     });
-
     if (!response.ok) return 'ERROR:';
-
-    const data = await response.json();
-    const reply = data?.choices?.[0]?.message?.content?.trim().toUpperCase() || 'A';
-
-    if (reply.includes('B')) {
-      return 'Table Recognition:';
-    }
-    if (reply.includes('C')) {
-      return 'Formula Recognition:';
-    }
+    const reply = (await response.json())?.choices?.[0]?.message?.content?.trim().toUpperCase() || 'A';
+    if (reply.includes('B')) return 'Table Recognition:';
+    if (reply.includes('C')) return 'Formula Recognition:';
     return 'OCR:';
-  } catch (error) {
-    console.error('路由分类请求出错:', error);
-    return 'ERROR:';
-  }
+  } catch (error) { return 'ERROR:'; }
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: '仅支持POST请求' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: '仅支持POST请求' });
 
   try {
     const {
-      imageData,
-      mimeType,
-      modelId = 'baidu-vl-1.6',
-      channel = 'baidu',
-      apiName,
-      classifyOnly = false
+      imageData, mimeType, modelId = 'baidu-vl-1.6',
+      channel = 'baidu', apiName, classifyOnly = false,
+      pollJobId // 新增：前端用于查询状态的 jobId
     } = req.body;
-
-    if (!imageData || !mimeType) {
-      return res.status(400).json({ error: '缺少 imageData 或 mimeType 参数' });
-    }
 
     let recognizedText = '';
     let routerLabel = null;
 
-    // 仅分类模式 (硅基流动使用)
     if (classifyOnly && channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.5') {
       const dynamicPrompt = await autoDetectPrompt(imageData, mimeType, process.env.SILICON_TOKEN);
-      if (dynamicPrompt === 'ERROR:') {
-        routerLabel = '路由分类服务异常，使用默认OCR';
-      } else if (dynamicPrompt?.includes('Table')) {
-        routerLabel = '表格';
-      } else if (dynamicPrompt?.includes('Formula')) {
-        routerLabel = '公式';
-      } else if (dynamicPrompt?.includes('OCR:')) {
-        routerLabel = '纯文本';
-      }
+      if (dynamicPrompt === 'ERROR:') routerLabel = '路由分类服务异常，使用默认OCR';
+      else if (dynamicPrompt?.includes('Table')) routerLabel = '表格';
+      else if (dynamicPrompt?.includes('Formula')) routerLabel = '公式';
+      else if (dynamicPrompt?.includes('OCR:')) routerLabel = '纯文本';
       return res.json({ routerResult: routerLabel });
     }
 
     // ============================================
-    // 渠道一：Aistudio Baidu (适配官方最新 V2 异步接口)
+    // 渠道一：Aistudio Baidu (彻底拆分为 提交 & 查询 两条互不干扰的线)
     // ============================================
     if (channel === 'baidu') {
-      if (!process.env.PADDLE_TOKEN) {
-        throw new Error('环境变量未设置：请配置 PADDLE_TOKEN');
-      }
-
+      if (!process.env.PADDLE_TOKEN) throw new Error('未配置 PADDLE_TOKEN');
       const JOB_URL = "https://paddleocr.aistudio-app.com/api/v2/ocr/jobs";
-      
-      // 匹配新的模型名称
       let actualModelName = "PaddleOCR-VL-1.6";
-      if (modelId === 'baidu-ocrv6' || modelId === 'baidu-ocrv5') {
-        actualModelName = "PP-OCRv6";
-      } else if (modelId === 'baidu-structurev3') {
-        actualModelName = "PP-StructureV3";
-      }
+      if (modelId === 'baidu-ocrv6' || modelId === 'baidu-ocrv5') actualModelName = "PP-OCRv6";
+      else if (modelId === 'baidu-structurev3') actualModelName = "PP-StructureV3";
 
-      // 构建请求 payload
-      const optionalPayload = {
-        useDocOrientationClassify: false,
-        useDocUnwarping: false,
-        useChartRecognition: false,
-        useTextlineOrientation: false
-      };
-
-      const formData = new FormData();
-      formData.append('model', actualModelName);
-      formData.append('optionalPayload', JSON.stringify(optionalPayload));
-      
-      // 将 Base64 转为 Blob 追加进 FormData
-      const buffer = Buffer.from(imageData, 'base64');
-      const blob = new Blob([buffer], { type: mimeType });
-      // 附带扩展名伪装成真实文件
-      formData.append('file', blob, mimeType === 'image/png' ? 'image.png' : 'image.jpg');
-
-      // 1. 提交 Job
-      const jobResponse = await fetch(JOB_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
-          // FormData fetch时切忌手动设置 Content-Type，由于boundary的原因会自动生成
-        },
-        body: formData,
-      });
-
-      if (!jobResponse.ok) {
-        const errorText = await jobResponse.text();
-        throw new Error(`百度 PaddleOCR 创建任务失败，状态码 ${jobResponse.status}: ${errorText}`);
-      }
-
-      const jobData = await jobResponse.json();
-      const jobId = jobData?.data?.jobId;
-      if (!jobId) throw new Error("无法获取到任务 jobId");
-
-      // 2. 轮询结果
-      let finalJsonlUrl = "";
-      const MAX_POLLING_ATTEMPTS = 25; // 最多轮询 25 次 (约 50 秒)，Vercel 有限制不能太久
-
-      for (let i = 0; i < MAX_POLLING_ATTEMPTS; i++) {
-        await new Promise(resolve => setTimeout(resolve, 2000)); // 每次轮询间隔2秒
-
-        const pollResponse = await fetch(`${JOB_URL}/${jobId}`, {
+      // 线路 A：如果是前端来查询进度的
+      if (pollJobId) {
+        const pollResponse = await fetch(`${JOB_URL}/${pollJobId}`, {
           method: 'GET',
           headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` }
         });
-
-        if (!pollResponse.ok) throw new Error("获取任务状态失败");
+        if (!pollResponse.ok) throw new Error("获取状态失败");
         const pollResult = await pollResponse.json();
         const state = pollResult?.data?.state;
 
         if (state === 'done') {
-          finalJsonlUrl = pollResult?.data?.resultUrl?.jsonUrl;
-          break;
+          const finalJsonlUrl = pollResult?.data?.resultUrl?.jsonUrl;
+          const jsonlResponse = await fetch(finalJsonlUrl);
+          const jsonlText = await jsonlResponse.text();
+          let fullParsedText = [];
+
+          jsonlText.split('\n').filter(l => l.trim() !== '').forEach(line => {
+            try {
+              const parsed = JSON.parse(line);
+              const resultObj = parsed?.result || {};
+              if (actualModelName === 'PP-OCRv6' && resultObj.ocrResults) {
+                 const pageTexts = resultObj.ocrResults.flatMap(r => r.prunedResult?.rec_texts || []).filter(Boolean);
+                 if (pageTexts.length > 0) fullParsedText.push(pageTexts.join('\n'));
+              } else if (resultObj.layoutParsingResults) {
+                 const pageTexts = resultObj.layoutParsingResults.map(r => r?.markdown?.text || '').filter(Boolean);
+                 if (pageTexts.length > 0) fullParsedText.push(pageTexts.join('\n\n'));
+              }
+            } catch (e) {}
+          });
+          return res.json({ status: 'done', text: fullParsedText.join('\n\n') });
         } else if (state === 'failed') {
-          throw new Error(`识别任务失败: ${pollResult?.data?.errorMsg}`);
+          throw new Error(`识别失败: ${pollResult?.data?.errorMsg}`);
+        } else {
+          // 状态为 pending / running，通知前端继续等
+          return res.json({ status: state });
         }
-        // 如果是 'pending' 或 'running' 则继续循环
       }
 
-      if (!finalJsonlUrl) {
-        throw new Error("任务超时未能完成，请稍后再试");
-      }
+      // 线路 B：如果是一开始提交图片的
+      if (!imageData) throw new Error('缺少图片数据');
+      const formData = new FormData();
+      formData.append('model', actualModelName);
+      formData.append('optionalPayload', JSON.stringify({
+        useDocOrientationClassify: false, useDocUnwarping: false,
+        useChartRecognition: false, useTextlineOrientation: false
+      }));
+      // Node.js 下构造 Blob 发送
+      const buffer = Buffer.from(imageData, 'base64');
+      const blob = new Blob([buffer], { type: mimeType });
+      formData.append('file', blob, mimeType === 'image/png' ? 'image.png' : 'image.jpg');
 
-      // 3. 拉取并解析 jsonl 结果文件
-      const jsonlResponse = await fetch(finalJsonlUrl);
-      if (!jsonlResponse.ok) throw new Error("无法获取解析结果文件");
-      
-      const jsonlText = await jsonlResponse.text();
-      const lines = jsonlText.split('\n').filter(line => line.trim() !== '');
-      let fullParsedText = [];
-
-      lines.forEach(line => {
-        try {
-          const parsed = JSON.parse(line);
-          const resultObj = parsed?.result || {};
-
-          // 如果是超轻量文本识别模型 PP-OCRv6
-          if (actualModelName === 'PP-OCRv6' && resultObj.ocrResults) {
-             const pageTexts = resultObj.ocrResults
-               .flatMap(res => res.prunedResult?.rec_texts || [])
-               .filter(Boolean);
-             if (pageTexts.length > 0) fullParsedText.push(pageTexts.join('\n'));
-          } 
-          // 如果是布局解析模型 (VL-1.6 / StructureV3)
-          else if (resultObj.layoutParsingResults) {
-             const pageTexts = resultObj.layoutParsingResults
-               .map(res => res?.markdown?.text || '')
-               .filter(Boolean);
-             if (pageTexts.length > 0) fullParsedText.push(pageTexts.join('\n\n'));
-          }
-        } catch (e) {
-          console.error("行数据解析错误: ", e);
-        }
+      const jobResponse = await fetch(JOB_URL, {
+        method: 'POST',
+        headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
+        body: formData,
       });
 
-      recognizedText = fullParsedText.join('\n\n');
+      if (!jobResponse.ok) throw new Error(`百度 API 拒绝请求: ${await jobResponse.text()}`);
+      const jobData = await jobResponse.json();
+      if (!jobData?.data?.jobId) throw new Error("无法获取 jobId");
+
+      // 拿到 ID 马上结束 Vercel 进程，防止超时
+      return res.json({ jobId: jobData.data.jobId, status: 'pending' });
     }
 
     // ============================================
