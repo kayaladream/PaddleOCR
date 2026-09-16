@@ -369,7 +369,34 @@ export default async function handler(req, res) {
     res.json(responsePayload);
 
   } catch (error) {
-    console.error('识别失败:', error.message);
-    res.status(500).json({ error: `${error.message}` });
+    console.error('识别失败:', error);
+    console.error('错误消息:', error.message);
+
+    if (error.cause) {
+      console.error('底层原因 error.cause:', error.cause);
+      console.error('cause.code:', error.cause.code);
+      console.error('cause.message:', error.cause.message);
+      console.error('cause.errno:', error.cause.errno);
+      console.error('cause.syscall:', error.cause.syscall);
+      console.error('cause.hostname:', error.cause.hostname);
+
+      if (error.cause.cause) {
+        console.error('更深层 cause:', error.cause.cause);
+      }
+    }
+
+    // 临时把 cause 返回给前端，方便在浏览器 Network 里看
+    res.status(500).json({
+      error: `${error.message}`,
+      cause: error.cause
+        ? {
+            code: error.cause.code,
+            message: error.cause.message,
+            errno: error.cause.errno,
+            syscall: error.cause.syscall,
+            hostname: error.cause.hostname,
+          }
+        : null,
+    });
   }
 }
