@@ -150,7 +150,7 @@ export default async function handler(req, res) {
       // 2. 提交任务（带代理回退）
       let jobResponse;
       const directUrl = JOB_URL;
-      const proxyUrl = `${process.env.PROXY_URL}/?target=${encodeURIComponent(JOB_URL)}`;
+      const proxyUrl = `https://${process.env.PROXY_URL}/?target=${encodeURIComponent(JOB_URL)}`;
 
       try {
         // 第一次尝试：直连百度
