@@ -147,44 +147,44 @@ export default async function handler(req, res) {
       formData.append('optionalPayload', JSON.stringify(optionalPayload));
       formData.append('file', blob, `image.${ext}`); // 必须指定文件名让后端识别
 
-// 2. 提交任务（带代理回退）
-let jobResponse;
-const directUrl = JOB_URL;
-const proxyUrl = `https://你的worker地址.workers.dev/?target=${encodeURIComponent(JOB_URL)}`;
+      // 2. 提交任务（带代理回退）
+      let jobResponse;
+      const directUrl = JOB_URL;
+      const proxyUrl = `https://baidu-proxy.kayaladream.workers.dev/?target=${encodeURIComponent(JOB_URL)}`;
 
-try {
-  // 第一次尝试：直连百度
-  jobResponse = await fetch(directUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
-    },
-    body: formData,
-  });
-} catch (directError) {
-  // 直连失败（通常是网络超时），记录日志并尝试代理
-  console.warn('百度直连失败，尝试通过 Cloudflare Worker 代理:', directError.message);
+      try {
+        // 第一次尝试：直连百度
+        jobResponse = await fetch(directUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
+          },
+          body: formData,
+        });
+      } catch (directError) {
+        // 直连失败（通常是网络超时），记录日志并尝试代理
+        console.warn('百度直连失败，尝试通过 Cloudflare Worker 代理:', directError.message);
 
-  try {
-    // 第二次尝试：通过 Worker 代理
-    jobResponse = await fetch(proxyUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
-      },
-      body: formData,
-    });
-  } catch (proxyError) {
-    // 代理也失败了，抛出错误
-    throw new Error(`百度 API 直连和代理均失败: ${proxyError.message}`);
-  }
-}
+        try {
+          // 第二次尝试：通过 Worker 代理
+          jobResponse = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
+            },
+            body: formData,
+          });
+        } catch (proxyError) {
+          // 代理也失败了，抛出错误
+          throw new Error(`百度 API 直连和代理均失败: ${proxyError.message}`);
+        }
+      }
 
-// 后续的错误处理和轮询逻辑保持不变
-if (!jobResponse.ok) {
-  const errText = await jobResponse.text();
-  throw new Error(`百度任务提交失败，状态码 ${jobResponse.status}: ${errText}`);
-}
+      // 后续的错误处理和轮询逻辑保持不变
+      if (!jobResponse.ok) {
+        const errText = await jobResponse.text();
+        throw new Error(`百度任务提交失败，状态码 ${jobResponse.status}: ${errText}`);
+      }
 
       const jobData = await jobResponse.json();
       const jobId = jobData?.data?.jobId;
