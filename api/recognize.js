@@ -214,8 +214,8 @@ export default async function handler(req, res) {
       if (lines.length > 0) {
         const resultObj = JSON.parse(lines[0])?.result || {};
         
-        if (modelId === 'baidu-ocrv5') {
-          // 延续你原来提取纯文本的逻辑
+        if (modelId === 'baidu-ocrv6' || modelId === 'baidu-ocrv5') {
+          // 提取纯文本的逻辑
           recognizedText = resultObj?.ocrResults
             ?.flatMap(res => res.prunedResult?.rec_texts || [])
             .filter(Boolean)
