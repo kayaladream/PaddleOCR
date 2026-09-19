@@ -150,7 +150,7 @@ export default async function handler(req, res) {
       // 2. 提交任务（带 GCP 代理回退）
       let jobResponse;
       const directUrl = JOB_URL;
-      // 注意：GCP 代理没有 https，直接拼接 http://IP:8080/
+      // 注意：GCP 代理没有 https，直接拼接 http://IP:端口号/
       const proxyUrl = `${process.env.PROXY_URL}/${encodeURIComponent(JOB_URL)}`;
 
       try {
@@ -173,6 +173,12 @@ export default async function handler(req, res) {
       if (!jobResponse.ok) {
         const errText = await jobResponse.text();
         throw new Error(`百度任务提交失败，状态码 ${jobResponse.status}: ${errText}`);
+      }
+
+      const jobData = await jobResponse.json();
+      const jobId = jobData?.data?.jobId;
+      if (!jobId) {
+        throw new Error('百度接口未返回 jobId，请检查账号 Token 或服务状态');
       }
 
       // 3. 轮询结果 (每次等待3秒，最多尝试40次约等于120秒，匹配前端超时)
