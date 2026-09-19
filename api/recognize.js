@@ -147,25 +147,32 @@ export default async function handler(req, res) {
       formData.append('optionalPayload', JSON.stringify(optionalPayload));
       formData.append('file', blob, `image.${ext}`); // 必须指定文件名让后端识别
 
-      // 2. 提交任务
-      const jobResponse = await fetch(JOB_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
-          // 注意：不要手动设置 Content-Type，fetch会自动处理包含 boundary 的 multipart/form-data 头
-        },
-        body: formData,
-      });
+      // 2. 提交任务（带 GCP 代理回退）
+      let jobResponse;
+      const directUrl = JOB_URL;
+      // 注意：GCP 代理没有 https，直接拼接 http://IP:8080/
+      const proxyUrl = `${process.env.PROXY_URL}/${encodeURIComponent(JOB_URL)}`;
+
+      try {
+        // 第一次尝试：直连百度
+        jobResponse = await fetch(directUrl, {
+          method: 'POST',
+          headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
+          body: formData,
+        });
+      } catch (directError) {
+        console.warn('百度直连失败，尝试通过 GCP 代理:', directError.message);
+        // 第二次尝试：通过 GCP 代理
+        jobResponse = await fetch(proxyUrl, {
+          method: 'POST',
+          headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
+          body: formData,
+        });
+      }
 
       if (!jobResponse.ok) {
         const errText = await jobResponse.text();
         throw new Error(`百度任务提交失败，状态码 ${jobResponse.status}: ${errText}`);
-      }
-
-      const jobData = await jobResponse.json();
-      const jobId = jobData?.data?.jobId;
-      if (!jobId) {
-        throw new Error('百度接口未返回 jobId，请检查账号 Token 或服务状态');
       }
 
       // 3. 轮询结果 (每次等待3秒，最多尝试40次约等于120秒，匹配前端超时)
@@ -177,14 +184,34 @@ export default async function handler(req, res) {
         await new Promise(resolve => setTimeout(resolve, 3000));
         attempts++;
 
-        const pollResponse = await fetch(`${JOB_URL}/${jobId}`, {
-          headers: {
-            'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
+        let pollResponse;
+        const pollUrl = `${JOB_URL}/${jobId}`;
+        const proxyPollUrl = `${process.env.PROXY_URL}/${encodeURIComponent(pollUrl)}`;
+
+        try {
+          // 第一次尝试：直连百度
+          pollResponse = await fetch(pollUrl, {
+            headers: {
+              'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
+            }
+          });
+        } catch (directError) {
+          console.warn('轮询直连失败，尝试通过 GCP 代理:', directError.message);
+          try {
+            // 第二次尝试：通过 GCP 代理
+            pollResponse = await fetch(proxyPollUrl, {
+              headers: {
+                'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
+              }
+            });
+          } catch (proxyError) {
+            console.error('轮询代理也失败:', proxyError.message);
+            continue; // 网络波动，继续下一次循环
           }
-        });
+        }
 
         // 容忍偶发的网络抖动
-        if (!pollResponse.ok) continue;
+        if (!pollResponse || !pollResponse.ok) continue;
 
         const pollData = await pollResponse.json();
         const state = pollData?.data?.state;
@@ -202,9 +229,24 @@ export default async function handler(req, res) {
       }
 
       // 4. 下载并解析 JSONL 结果文件
-      const jsonlResponse = await fetch(jsonlUrl);
-      if (!jsonlResponse.ok) {
-        throw new Error(`获取结果文件失败，状态码 ${jsonlResponse.status}`);
+      let jsonlResponse;
+      const proxyJsonlUrl = `${process.env.PROXY_URL}/${encodeURIComponent(jsonlUrl)}`;
+
+      try {
+        // 第一次尝试：直连百度
+        jsonlResponse = await fetch(jsonlUrl);
+      } catch (directError) {
+        console.warn('下载结果直连失败，尝试通过 GCP 代理:', directError.message);
+        try {
+          // 第二次尝试：通过 GCP 代理
+          jsonlResponse = await fetch(proxyJsonlUrl);
+        } catch (proxyError) {
+          throw new Error(`下载结果文件代理也失败: ${proxyError.message}`);
+        }
+      }
+
+      if (!jsonlResponse || !jsonlResponse.ok) {
+        throw new Error(`获取结果文件失败，状态码 ${jsonlResponse ? jsonlResponse.status : '未知'}`);
       }
       
       const jsonlText = await jsonlResponse.text();
