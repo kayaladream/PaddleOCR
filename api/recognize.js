@@ -119,7 +119,7 @@ export default async function handler(req, res) {
       }
 
       const JOB_URL = 'https://paddleocr.aistudio-app.com/api/v2/ocr/jobs';
-
+      
       let actualModelName = 'PaddleOCR-VL-1.6';
       let optionalPayload = {};
 
@@ -145,7 +145,7 @@ export default async function handler(req, res) {
       const formData = new FormData();
       formData.append('model', actualModelName);
       formData.append('optionalPayload', JSON.stringify(optionalPayload));
-      formData.append('file', blob, `image.${ext}`);
+      formData.append('file', blob, `image.${ext}`); // 必须指定文件名让后端识别
 
       // 2. 提交任务（带代理回退）
       let jobResponse;
@@ -153,6 +153,7 @@ export default async function handler(req, res) {
       const proxyUrl = `${process.env.PROXY_URL}/${encodeURIComponent(JOB_URL)}`;
 
       try {
+        // 第一次尝试：直连百度
         console.log(`[网络检测] 正在尝试直连百度提交任务...`);
         jobResponse = await fetch(directUrl, {
           method: 'POST',
@@ -162,24 +163,25 @@ export default async function handler(req, res) {
         if (jobResponse.ok) {
           console.log(`✅ [网络检测] 直连百度提交任务成功！`);
         } else {
-          console.log(`⚠️ [网络检测] 直连百度返回非200，尝试通过代理...`);
+          console.log(`⚠️ [网络检测] 直连百度返回非200，尝试通过阿里云代理...`);
         }
       } catch (directError) {
-        console.log(`⚠️ [网络检测] 直连百度失败（国内网络常见），正在通过代理提交...`);
+        console.log(`⚠️ [网络检测] 直连百度失败（国内网络常见），正在通过阿里云代理提交...`);
         try {
+          // 第二次尝试：通过阿里云代理
           jobResponse = await fetch(proxyUrl, {
             method: 'POST',
             headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
             body: formData,
           });
           if (jobResponse.ok) {
-            console.log(`✅ [网络检测] 代理提交成功！`);
+            console.log(`✅ [网络检测] 阿里云代理提交成功！`);
           } else {
-            console.log(`❌ [网络检测] 代理提交失败，状态码: ${jobResponse.status}`);
+            console.log(`❌ [网络检测] 阿里云代理提交失败，状态码: ${jobResponse.status}`);
           }
         } catch (proxyError) {
-          console.error(`❌ [网络检测] 代理也连接超时，彻底失败: ${proxyError.message}`);
-          throw proxyError;
+          console.error(`❌ [网络检测] 阿里云代理也连接超时，彻底失败: ${proxyError.message}`);
+          throw proxyError; // 抛出异常，让外层 catch 捕获
         }
       }
 
@@ -194,9 +196,9 @@ export default async function handler(req, res) {
         throw new Error('百度接口未返回 jobId，请检查账号 Token 或服务状态');
       }
 
-      // 3. 轮询结果
+      // 3. 轮询结果 (每次等待3秒，最多尝试40次约等于120秒，匹配前端超时)
       let jsonlUrl = '';
-      const maxRetries = 40;
+      const maxRetries = 40; 
       let attempts = 0;
 
       while (attempts < maxRetries) {
@@ -208,24 +210,31 @@ export default async function handler(req, res) {
         const proxyPollUrl = `${process.env.PROXY_URL}/${encodeURIComponent(pollUrl)}`;
 
         try {
+          // 第一次尝试：直连百度
           pollResponse = await fetch(pollUrl, {
-            headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` }
+            headers: {
+              'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
+            }
           });
         } catch (directError) {
-          console.log(`[网络检测] 轮询直连失败，尝试通过代理 (第 ${attempts} 次)...`);
+          console.log(`[网络检测] 轮询直连失败，尝试通过阿里云代理 (第 ${attempts} 次)...`);
           try {
+            // 第二次尝试：通过阿里云代理
             pollResponse = await fetch(proxyPollUrl, {
-              headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` }
+              headers: {
+                'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
+              }
             });
           } catch (proxyError) {
             console.log(`[网络检测] 轮询代理也失败 (第 ${attempts} 次)，等待下轮重试: ${proxyError.message}`);
-            continue;
+            continue; // 网络波动，继续下一次循环
           }
         }
 
+        // 容忍偶发的网络抖动
         if (!pollResponse || !pollResponse.ok) {
-          console.log(`[轮询状态] 第 ${attempts} 次轮询返回状态码: ${pollResponse ? pollResponse.status : '未知'}`);
-          continue;
+            console.log(`[轮询状态] 第 ${attempts} 次轮询返回状态码: ${pollResponse ? pollResponse.status : '未知'}`);
+            continue;
         }
 
         const pollData = await pollResponse.json();
@@ -245,54 +254,50 @@ export default async function handler(req, res) {
         throw new Error('轮询超时，未能获取百度识别结果');
       }
 
-      // 4. 下载结果文件（代理会直接返回提取后的文本）
+      // 4. 下载并解析 JSONL 结果文件
       let jsonlResponse;
       const proxyJsonlUrl = `${process.env.PROXY_URL}/${encodeURIComponent(jsonlUrl)}`;
 
       try {
+        // 第一次尝试：直连百度
         console.log(`[网络检测] 正在尝试直连下载结果文件...`);
         jsonlResponse = await fetch(jsonlUrl);
       } catch (directError) {
-        console.log(`⚠️ [网络检测] 下载结果直连失败，尝试通过代理下载...`);
-        jsonlResponse = await fetch(proxyJsonlUrl, {
-          headers: { 'x-model-id': modelId }
-        });
-        if (jsonlResponse && jsonlResponse.ok) {
-          console.log(`✅ [网络检测] 代理下载结果成功！`);
+        console.log(`⚠️ [网络检测] 下载结果直连失败，尝试通过阿里云代理下载...`);
+        try {
+          // 第二次尝试：通过阿里云代理
+          jsonlResponse = await fetch(proxyJsonlUrl);
+          if (jsonlResponse && jsonlResponse.ok) {
+            console.log(`✅ [网络检测] 代理下载结果成功！`);
+          }
+        } catch (proxyError) {
+          throw new Error(`下载结果文件代理也失败: ${proxyError.message}`);
         }
       }
 
       if (!jsonlResponse || !jsonlResponse.ok) {
         throw new Error(`获取结果文件失败，状态码 ${jsonlResponse ? jsonlResponse.status : '未知'}`);
       }
-
-      // 判断是否由代理提取过文本
-      if (jsonlResponse.headers.get('x-extracted-text') === 'true') {
-        recognizedText = await jsonlResponse.text();
-      } else {
-        // 直连返回的原始 JSONL，需要解析（兼容处理）
-        const jsonlText = await jsonlResponse.text();
-        const lines = jsonlText.trim().split('\n').filter(Boolean);
-        if (lines.length > 0) {
-          // 取所有行的并集，防止漏掉内容
-          let fullText = '';
-          for (const line of lines) {
-            const resultObj = JSON.parse(line)?.result || {};
-            let lineText = '';
-            if (modelId === 'baidu-ocrv6' || modelId === 'baidu-ocrv5') {
-              lineText = resultObj?.ocrResults
-                ?.flatMap(res => res.prunedResult?.rec_texts || [])
-                .filter(Boolean)
-                .join('\n') || '';
-            } else {
-              lineText = resultObj?.layoutParsingResults?.[0]?.markdown?.text || '';
-            }
-            if (lineText) fullText += lineText + '\n\n';
-          }
-          recognizedText = fullText.trim();
+      
+      const jsonlText = await jsonlResponse.text();
+      const lines = jsonlText.trim().split('\n').filter(Boolean);
+      
+      // 因为每次发单张图，所以提取第一行即可
+      if (lines.length > 0) {
+        const resultObj = JSON.parse(lines[0])?.result || {};
+        
+        if (modelId === 'baidu-ocrv6' || modelId === 'baidu-ocrv5') {
+          // 提取纯文本的逻辑
+          recognizedText = resultObj?.ocrResults
+            ?.flatMap(res => res.prunedResult?.rec_texts || [])
+            .filter(Boolean)
+            .join('\n') || '';
         } else {
-          recognizedText = '';
+          // 提取 Markdown 格式的逻辑
+          recognizedText = resultObj?.layoutParsingResults?.[0]?.markdown?.text || '';
         }
+      } else {
+        recognizedText = '';
       }
     }
 
@@ -380,11 +385,15 @@ export default async function handler(req, res) {
         if (apiName === 'deepseek-ai/DeepSeek-OCR') {
           console.log('DeepSeek rawText (after parse):', rawText.substring(0, 200));
 
+          // 1. 判断是否存在典型的空白/乱码特征（大量重复数字点号）
           const looksLikeNoise = /(\d\.){5,}\d/.test(rawText) ||
-            /^[\d.#\s]+$/.test(rawText.trim());
+                                 /^[\d.#\s]+$/.test(rawText.trim());
 
+          // 2. 只有存在乱码特征时，才清理孤立的 "text" 噪声
           if (looksLikeNoise) {
+            // 删除单独成行的 "text"（大小写不限）
             rawText = rawText.replace(/^\s*text\s*$/gim, '');
+            // 删除被空白包围的独立 "text" 单词
             rawText = rawText.replace(/\btext\b/gi, (match, offset, str) => {
               const before = offset === 0 ? '' : str[offset - 1];
               const after = offset + match.length >= str.length ? '' : str[offset + match.length];
@@ -392,8 +401,10 @@ export default async function handler(req, res) {
             });
           }
 
+          // 3. 压缩多余空行
           rawText = rawText.replace(/\n{3,}/g, '\n\n');
 
+          // 4. 空白图片检测（即使没有乱码特征，也可能完全为空）
           let cleaned = rawText.replace(/\[\[.*?\]\]/g, '');
           cleaned = cleaned.replace(/<\|[^>]*\|>/g, '');
           cleaned = cleaned.replace(/[\d.#\s\-–—_\/\\\(\)\[\]\*=\+,|]/g, '');
@@ -405,7 +416,7 @@ export default async function handler(req, res) {
           }
         }
 
-        // 原有的通用清洗逻辑
+        // 原有的通用清洗逻辑（所有模型均适用，包括 DeepSeek）
         rawText = rawText.replace(/^.*<\|ref\|>.*<\/\|ref\|>.*$/gm, '');
         rawText = rawText.replace(/^.*<\|det\|>.*<\/\|det\|>.*$/gm, '');
         rawText = rawText.replace(/<\|?LOC[^>]*\|?>/g, '');
@@ -446,16 +457,17 @@ export default async function handler(req, res) {
       }
     }
 
+    // 把 cause 返回给前端，方便在浏览器 Network 里看
     res.status(500).json({
       error: `${error.message}`,
       cause: error.cause
         ? {
-          code: error.cause.code,
-          message: error.cause.message,
-          errno: error.cause.errno,
-          syscall: error.cause.syscall,
-          hostname: error.cause.hostname,
-        }
+            code: error.cause.code,
+            message: error.cause.message,
+            errno: error.cause.errno,
+            syscall: error.cause.syscall,
+            hostname: error.cause.hostname,
+          }
         : null,
     });
   }
