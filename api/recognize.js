@@ -177,7 +177,7 @@ export default async function handler(req, res) {
               method: 'POST',
               headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
               body: formData,
-              signal: AbortSignal.timeout(15000) // 代理给宽容一点的超时时间
+              signal: AbortSignal.timeout(60000) // 代理给宽容一点的超时时间
             });
           } catch (proxyError) {
             console.error(`❌ [网络检测] 云代理连接异常: ${proxyError.message}`);
