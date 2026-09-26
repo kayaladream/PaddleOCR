@@ -110,7 +110,7 @@ export default async function handler(req, res) {
       return res.json({ routerResult: routerLabel });
     }
 
-// ============================================
+    // ============================================
     // 渠道一：Aistudio Baidu (最新异步接口)
     // ============================================
     if (channel === 'baidu') {
@@ -147,27 +147,42 @@ export default async function handler(req, res) {
       formData.append('optionalPayload', JSON.stringify(optionalPayload));
       formData.append('file', blob, `image.${ext}`); // 必须指定文件名让后端识别
 
-      // 2. 提交任务（带 GCP 代理回退）
+      // 2. 提交任务（带代理回退）
       let jobResponse;
       const directUrl = JOB_URL;
-      // 注意：GCP 代理没有 https，直接拼接 http://IP:端口号/
       const proxyUrl = `${process.env.PROXY_URL}/${encodeURIComponent(JOB_URL)}`;
 
       try {
         // 第一次尝试：直连百度
+        console.log(`[网络检测] 正在尝试直连百度提交任务...`);
         jobResponse = await fetch(directUrl, {
           method: 'POST',
           headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
           body: formData,
         });
+        if (jobResponse.ok) {
+          console.log(`✅ [网络检测] 直连百度提交任务成功！`);
+        } else {
+          console.log(`⚠️ [网络检测] 直连百度返回非200，尝试通过阿里云代理...`);
+        }
       } catch (directError) {
-        console.warn('百度直连失败，尝试通过 GCP 代理:', directError.message);
-        // 第二次尝试：通过 GCP 代理
-        jobResponse = await fetch(proxyUrl, {
-          method: 'POST',
-          headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
-          body: formData,
-        });
+        console.log(`⚠️ [网络检测] 直连百度失败（国内网络常见），正在通过阿里云代理提交...`);
+        try {
+          // 第二次尝试：通过阿里云代理
+          jobResponse = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
+            body: formData,
+          });
+          if (jobResponse.ok) {
+            console.log(`✅ [网络检测] 阿里云代理提交成功！`);
+          } else {
+            console.log(`❌ [网络检测] 阿里云代理提交失败，状态码: ${jobResponse.status}`);
+          }
+        } catch (proxyError) {
+          console.error(`❌ [网络检测] 阿里云代理也连接超时，彻底失败: ${proxyError.message}`);
+          throw proxyError; // 抛出异常，让外层 catch 捕获
+        }
       }
 
       if (!jobResponse.ok) {
@@ -202,28 +217,33 @@ export default async function handler(req, res) {
             }
           });
         } catch (directError) {
-          console.warn('轮询直连失败，尝试通过 GCP 代理:', directError.message);
+          console.log(`[网络检测] 轮询直连失败，尝试通过阿里云代理 (第 ${attempts} 次)...`);
           try {
-            // 第二次尝试：通过 GCP 代理
+            // 第二次尝试：通过阿里云代理
             pollResponse = await fetch(proxyPollUrl, {
               headers: {
                 'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
               }
             });
           } catch (proxyError) {
-            console.error('轮询代理也失败:', proxyError.message);
+            console.log(`[网络检测] 轮询代理也失败 (第 ${attempts} 次)，等待下轮重试: ${proxyError.message}`);
             continue; // 网络波动，继续下一次循环
           }
         }
 
         // 容忍偶发的网络抖动
-        if (!pollResponse || !pollResponse.ok) continue;
+        if (!pollResponse || !pollResponse.ok) {
+            console.log(`[轮询状态] 第 ${attempts} 次轮询返回状态码: ${pollResponse ? pollResponse.status : '未知'}`);
+            continue;
+        }
 
         const pollData = await pollResponse.json();
         const state = pollData?.data?.state;
+        console.log(`[轮询状态] 第 ${attempts} 次轮询，当前任务状态: ${state}`);
 
         if (state === 'done') {
           jsonlUrl = pollData?.data?.resultUrl?.jsonUrl;
+          console.log(`✅ [任务完成] 成功获取结果URL！`);
           break;
         } else if (state === 'failed') {
           throw new Error(`百度 OCR 任务执行失败: ${pollData?.data?.errorMsg}`);
@@ -240,12 +260,16 @@ export default async function handler(req, res) {
 
       try {
         // 第一次尝试：直连百度
+        console.log(`[网络检测] 正在尝试直连下载结果文件...`);
         jsonlResponse = await fetch(jsonlUrl);
       } catch (directError) {
-        console.warn('下载结果直连失败，尝试通过 GCP 代理:', directError.message);
+        console.log(`⚠️ [网络检测] 下载结果直连失败，尝试通过阿里云代理下载...`);
         try {
-          // 第二次尝试：通过 GCP 代理
+          // 第二次尝试：通过阿里云代理
           jsonlResponse = await fetch(proxyJsonlUrl);
+          if (jsonlResponse && jsonlResponse.ok) {
+            console.log(`✅ [网络检测] 代理下载结果成功！`);
+          }
         } catch (proxyError) {
           throw new Error(`下载结果文件代理也失败: ${proxyError.message}`);
         }
@@ -433,7 +457,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 临时把 cause 返回给前端，方便在浏览器 Network 里看
+    // 把 cause 返回给前端，方便在浏览器 Network 里看
     res.status(500).json({
       error: `${error.message}`,
       cause: error.cause
