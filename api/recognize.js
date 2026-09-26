@@ -1,23 +1,4 @@
 // api/recognize.js
-
-// ===== 带超时控制的 fetch =====
-async function fetchWithTimeout(resource, options = {}) {
-  const { timeout = 5000, ...fetchOptions } = options;
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-  try {
-    const response = await fetch(resource, { ...fetchOptions, signal: controller.signal });
-    clearTimeout(id);
-    return response;
-  } catch (error) {
-    clearTimeout(id);
-    if (error.name === 'AbortError') {
-      throw new Error(`请求超时 (${timeout}ms)`);
-    }
-    throw error;
-  }
-}
-
 function parseOtslToHtml(text) {
   if (!text.includes('<nl>') && !text.includes('<fcel>')) {
     return text;
@@ -51,7 +32,7 @@ function parseOtslToHtml(text) {
 
 async function autoDetectPrompt(imageData, mimeType, token) {
   try {
-    const response = await fetchWithTimeout('https://api.siliconflow.cn/v1/chat/completions', {
+    const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -69,7 +50,6 @@ async function autoDetectPrompt(imageData, mimeType, token) {
         max_tokens: 5,
         temperature: 0.1,
       }),
-      timeout: 10000,
     });
 
     if (!response.ok) return 'ERROR:';
@@ -88,7 +68,7 @@ async function autoDetectPrompt(imageData, mimeType, token) {
     console.log('🖼️ 路由器检测为：纯文本 -> 使用 OCR:');
     return 'OCR:';
   } catch (error) {
-    console.error('路由分类请求出错:', error.message);
+    console.error('路由分类请求出错:', error);
     return 'ERROR:';
   }
 }
@@ -165,56 +145,49 @@ export default async function handler(req, res) {
       const formData = new FormData();
       formData.append('model', actualModelName);
       formData.append('optionalPayload', JSON.stringify(optionalPayload));
-      formData.append('file', blob, `image.${ext}`);
+      formData.append('file', blob, `image.${ext}`); // 必须指定文件名让后端识别
 
-      // 2. 提交任务（带超时机制 + 代理回退）
-      let jobResponse = null;
+      // 2. 提交任务（带代理回退）
+      let jobResponse;
       const directUrl = JOB_URL;
       const proxyUrl = `${process.env.PROXY_URL}/${encodeURIComponent(JOB_URL)}`;
 
       try {
-        // 第一次尝试：直连百度（5秒超时，快速失败）
-        console.log(`[网络检测] 正在尝试直连百度提交任务（超时5秒）...`);
-        jobResponse = await fetchWithTimeout(directUrl, {
+        // 第一次尝试：直连百度
+        console.log(`[网络检测] 正在尝试直连百度提交任务...`);
+        jobResponse = await fetch(directUrl, {
           method: 'POST',
           headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
           body: formData,
-          timeout: 5000, 
         });
         if (jobResponse.ok) {
           console.log(`✅ [网络检测] 直连百度提交任务成功！`);
         } else {
-          console.log(`⚠️ [网络检测] 直连百度返回非200 (状态码: ${jobResponse.status})，尝试通过阿里云代理...`);
-          jobResponse = null; // 置空，触发代理逻辑
+          console.log(`⚠️ [网络检测] 直连百度返回非200，尝试通过云代理...`);
         }
       } catch (directError) {
-        console.log(`⚠️ [网络检测] 直连百度失败 (${directError.message})，正在通过阿里云代理提交...`);
-        jobResponse = null;
-      }
-
-      // 如果直连失败，走代理
-      if (!jobResponse) {
+        console.log(`⚠️ [网络检测] 直连百度失败，正在通过云代理提交...`);
         try {
-          jobResponse = await fetchWithTimeout(proxyUrl, {
+          // 第二次尝试：通过云代理
+          jobResponse = await fetch(proxyUrl, {
             method: 'POST',
             headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
             body: formData,
-            timeout: 20000, // 代理提交给20秒
           });
           if (jobResponse.ok) {
-            console.log(`✅ [网络检测] 阿里云代理提交成功！`);
+            console.log(`✅ [网络检测] 云代理提交成功！`);
           } else {
-            console.log(`❌ [网络检测] 阿里云代理提交失败，状态码: ${jobResponse.status}`);
+            console.log(`❌ [网络检测] 云代理提交失败，状态码: ${jobResponse.status}`);
           }
         } catch (proxyError) {
-          console.error(`❌ [网络检测] 阿里云代理也连接超时，彻底失败: ${proxyError.message}`);
-          throw proxyError;
+          console.error(`❌ [网络检测] 云代理也连接超时，彻底失败: ${proxyError.message}`);
+          throw proxyError; // 抛出异常，让外层 catch 捕获
         }
       }
 
-      if (!jobResponse || !jobResponse.ok) {
-        const errText = jobResponse ? await jobResponse.text() : '无响应';
-        throw new Error(`百度任务提交失败，状态码 ${jobResponse ? jobResponse.status : '未知'}: ${errText}`);
+      if (!jobResponse.ok) {
+        const errText = await jobResponse.text();
+        throw new Error(`百度任务提交失败，状态码 ${jobResponse.status}: ${errText}`);
       }
 
       const jobData = await jobResponse.json();
@@ -223,7 +196,7 @@ export default async function handler(req, res) {
         throw new Error('百度接口未返回 jobId，请检查账号 Token 或服务状态');
       }
 
-      // 3. 轮询结果 (每次等待3秒，最多尝试40次约等于120秒)
+      // 3. 轮询结果 (每次等待3秒，最多尝试40次约等于120秒，匹配前端超时)
       let jsonlUrl = '';
       const maxRetries = 40; 
       let attempts = 0;
@@ -232,23 +205,25 @@ export default async function handler(req, res) {
         await new Promise(resolve => setTimeout(resolve, 3000));
         attempts++;
 
-        let pollResponse = null;
+        let pollResponse;
         const pollUrl = `${JOB_URL}/${jobId}`;
         const proxyPollUrl = `${process.env.PROXY_URL}/${encodeURIComponent(pollUrl)}`;
 
         try {
-          // 第一次尝试：直连百度（5秒超时）
-          pollResponse = await fetchWithTimeout(pollUrl, {
-            headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
-            timeout: 5000,
+          // 第一次尝试：直连百度
+          pollResponse = await fetch(pollUrl, {
+            headers: {
+              'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
+            }
           });
         } catch (directError) {
-          console.log(`[网络检测] 轮询直连失败，尝试通过阿里云代理 (第 ${attempts} 次)...`);
+          console.log(`[网络检测] 轮询直连失败，尝试通过云代理 (第 ${attempts} 次)...`);
           try {
-            // 第二次尝试：通过阿里云代理（10秒超时）
-            pollResponse = await fetchWithTimeout(proxyPollUrl, {
-              headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
-              timeout: 10000,
+            // 第二次尝试：通过云代理
+            pollResponse = await fetch(proxyPollUrl, {
+              headers: {
+                'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
+              }
             });
           } catch (proxyError) {
             console.log(`[网络检测] 轮询代理也失败 (第 ${attempts} 次)，等待下轮重试: ${proxyError.message}`);
@@ -280,35 +255,28 @@ export default async function handler(req, res) {
       }
 
       // 4. 下载并解析 JSONL 结果文件
-      // ⚠️ 修改点：增加超时时间至 60 秒，并加入 3 次重试机制
-      let jsonlResponse = null;
-      let downloadSuccess = false;
+      let jsonlResponse;
       const proxyJsonlUrl = `${process.env.PROXY_URL}/${encodeURIComponent(jsonlUrl)}`;
 
-      for (let i = 0; i < 3; i++) {
+      try {
+        // 第一次尝试：直连百度
+        console.log(`[网络检测] 正在尝试直连下载结果文件...`);
+        jsonlResponse = await fetch(jsonlUrl);
+      } catch (directError) {
+        console.log(`⚠️ [网络检测] 下载结果直连失败，尝试通过云代理下载...`);
         try {
-          console.log(`[网络检测] 正在通过阿里云代理下载结果文件（超时60秒，第 ${i + 1} 次尝试）...`);
-          jsonlResponse = await fetchWithTimeout(proxyJsonlUrl, {
-            timeout: 60000, // 提升至 60 秒
-          });
+          // 第二次尝试：通过云代理
+          jsonlResponse = await fetch(proxyJsonlUrl);
           if (jsonlResponse && jsonlResponse.ok) {
             console.log(`✅ [网络检测] 代理下载结果成功！`);
-            downloadSuccess = true;
-            break;
-          } else {
-            console.log(`❌ [网络检测] 代理下载结果失败，状态码: ${jsonlResponse ? jsonlResponse.status : '未知'}`);
           }
         } catch (proxyError) {
-          console.log(`⚠️ [网络检测] 代理下载结果尝试 ${i + 1} 失败: ${proxyError.message}`);
-          if (i < 2) {
-            console.log(`[网络检测] 等待 3 秒后进行下一次重试...`);
-            await new Promise(resolve => setTimeout(resolve, 3000));
-          }
+          throw new Error(`下载结果文件代理也失败: ${proxyError.message}`);
         }
       }
 
-      if (!downloadSuccess || !jsonlResponse || !jsonlResponse.ok) {
-        throw new Error(`获取结果文件失败，已重试3次，请检查阿里云代理日志`);
+      if (!jsonlResponse || !jsonlResponse.ok) {
+        throw new Error(`获取结果文件失败，状态码 ${jsonlResponse ? jsonlResponse.status : '未知'}`);
       }
       
       const jsonlText = await jsonlResponse.text();
@@ -393,14 +361,13 @@ export default async function handler(req, res) {
         ...(config.presence_penalty !== undefined && { presence_penalty: config.presence_penalty }),
       };
 
-      const response = await fetchWithTimeout(url, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${process.env.SILICON_TOKEN}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
-        timeout: 120000, // 硅基流动大模型识别可能需要较长时间，给2分钟
       });
 
       if (!response.ok) {
@@ -414,19 +381,30 @@ export default async function handler(req, res) {
       if (rawText) {
         rawText = parseOtslToHtml(rawText);
 
-        // ===== DeepSeek-OCR 专有后处理 =====
+        // ===== DeepSeek-OCR 专有后处理：智能清洗 + 空白检测 =====
         if (apiName === 'deepseek-ai/DeepSeek-OCR') {
           console.log('DeepSeek rawText (after parse):', rawText.substring(0, 200));
-          const looksLikeNoise = /(\d\.){5,}\d/.test(rawText) || /^[\d.#\s]+$/.test(rawText.trim());
+
+          // 1. 判断是否存在典型的空白/乱码特征（大量重复数字点号）
+          const looksLikeNoise = /(\d\.){5,}\d/.test(rawText) ||
+                                 /^[\d.#\s]+$/.test(rawText.trim());
+
+          // 2. 只有存在乱码特征时，才清理孤立的 "text" 噪声
           if (looksLikeNoise) {
+            // 删除单独成行的 "text"（大小写不限）
             rawText = rawText.replace(/^\s*text\s*$/gim, '');
+            // 删除被空白包围的独立 "text" 单词
             rawText = rawText.replace(/\btext\b/gi, (match, offset, str) => {
               const before = offset === 0 ? '' : str[offset - 1];
               const after = offset + match.length >= str.length ? '' : str[offset + match.length];
               return (/[\s\n]/.test(before) && /[\s\n]/.test(after)) ? '' : match;
             });
           }
+
+          // 3. 压缩多余空行
           rawText = rawText.replace(/\n{3,}/g, '\n\n');
+
+          // 4. 空白图片检测（即使没有乱码特征，也可能完全为空）
           let cleaned = rawText.replace(/\[\[.*?\]\]/g, '');
           cleaned = cleaned.replace(/<\|[^>]*\|>/g, '');
           cleaned = cleaned.replace(/[\d.#\s\-–—_\/\\\(\)\[\]\*=\+,|]/g, '');
@@ -438,7 +416,7 @@ export default async function handler(req, res) {
           }
         }
 
-        // 通用清洗逻辑
+        // 原有的通用清洗逻辑（所有模型均适用，包括 DeepSeek）
         rawText = rawText.replace(/^.*<\|ref\|>.*<\/\|ref\|>.*$/gm, '');
         rawText = rawText.replace(/^.*<\|det\|>.*<\/\|det\|>.*$/gm, '');
         rawText = rawText.replace(/<\|?LOC[^>]*\|?>/g, '');
@@ -468,23 +446,29 @@ export default async function handler(req, res) {
 
     if (error.cause) {
       console.error('底层原因 error.cause:', error.cause);
+      console.error('cause.code:', error.cause.code);
+      console.error('cause.message:', error.cause.message);
+      console.error('cause.errno:', error.cause.errno);
+      console.error('cause.syscall:', error.cause.syscall);
+      console.error('cause.hostname:', error.cause.hostname);
+
+      if (error.cause.cause) {
+        console.error('更深层 cause:', error.cause.cause);
+      }
     }
 
-    // ⚠️ 这里提取为变量，彻底杜绝括号嵌套导致的 SyntaxError
-    const errorPayload = {
-      error: error.message || '未知错误'
-    };
-
-    if (error.cause) {
-      errorPayload.cause = {
-        code: error.cause.code,
-        message: error.cause.message,
-        errno: error.cause.errno,
-        syscall: error.cause.syscall,
-        hostname: error.cause.hostname,
-      };
-    }
-
-    res.status(500).json(errorPayload);
+    // 把 cause 返回给前端，方便在浏览器 Network 里看
+    res.status(500).json({
+      error: `${error.message}`,
+      cause: error.cause
+        ? {
+            code: error.cause.code,
+            message: error.cause.message,
+            errno: error.cause.errno,
+            syscall: error.cause.syscall,
+            hostname: error.cause.hostname,
+          }
+        : null,
+    });
   }
 }
