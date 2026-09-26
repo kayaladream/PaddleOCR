@@ -166,21 +166,21 @@ export default async function handler(req, res) {
           console.log(`⚠️ [网络检测] 直连百度返回非200，尝试通过阿里云代理...`);
         }
       } catch (directError) {
-        console.log(`⚠️ [网络检测] 直连百度失败，正在通过云代理提交...`);
+        console.log(`⚠️ [网络检测] 直连百度失败（国内网络常见），正在通过阿里云代理提交...`);
         try {
-          // 第二次尝试：通过云代理
+          // 第二次尝试：通过阿里云代理
           jobResponse = await fetch(proxyUrl, {
             method: 'POST',
             headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
             body: formData,
           });
           if (jobResponse.ok) {
-            console.log(`✅ [网络检测] 云代理提交成功！`);
+            console.log(`✅ [网络检测] 阿里云代理提交成功！`);
           } else {
-            console.log(`❌ [网络检测] 云代理提交失败，状态码: ${jobResponse.status}`);
+            console.log(`❌ [网络检测] 阿里云代理提交失败，状态码: ${jobResponse.status}`);
           }
         } catch (proxyError) {
-          console.error(`❌ [网络检测] 云代理也连接超时，彻底失败: ${proxyError.message}`);
+          console.error(`❌ [网络检测] 阿里云代理也连接超时，彻底失败: ${proxyError.message}`);
           throw proxyError; // 抛出异常，让外层 catch 捕获
         }
       }
@@ -217,9 +217,9 @@ export default async function handler(req, res) {
             }
           });
         } catch (directError) {
-          console.log(`[网络检测] 轮询直连失败，尝试通过云代理 (第 ${attempts} 次)...`);
+          console.log(`[网络检测] 轮询直连失败，尝试通过阿里云代理 (第 ${attempts} 次)...`);
           try {
-            // 第二次尝试：通过云代理
+            // 第二次尝试：通过阿里云代理
             pollResponse = await fetch(proxyPollUrl, {
               headers: {
                 'Authorization': `bearer ${process.env.PADDLE_TOKEN}`
@@ -263,9 +263,9 @@ export default async function handler(req, res) {
         console.log(`[网络检测] 正在尝试直连下载结果文件...`);
         jsonlResponse = await fetch(jsonlUrl);
       } catch (directError) {
-        console.log(`⚠️ [网络检测] 下载结果直连失败，尝试通过云代理下载...`);
+        console.log(`⚠️ [网络检测] 下载结果直连失败，尝试通过阿里云代理下载...`);
         try {
-          // 第二次尝试：通过云代理
+          // 第二次尝试：通过阿里云代理
           jsonlResponse = await fetch(proxyJsonlUrl);
           if (jsonlResponse && jsonlResponse.ok) {
             console.log(`✅ [网络检测] 代理下载结果成功！`);
@@ -279,8 +279,6 @@ export default async function handler(req, res) {
         throw new Error(`获取结果文件失败，状态码 ${jsonlResponse ? jsonlResponse.status : '未知'}`);
       }
       
-      console.log(`✅ [网络检测] 结果文件下载成功！`); // 新增日志
-
       const jsonlText = await jsonlResponse.text();
       const lines = jsonlText.trim().split('\n').filter(Boolean);
       
@@ -301,7 +299,6 @@ export default async function handler(req, res) {
       } else {
         recognizedText = '';
       }
-      console.log(`✅ [解析] JSONL 解析完成，提取文本长度: ${recognizedText.length}`); // 新增日志
     }
 
     // ============================================
@@ -441,7 +438,6 @@ export default async function handler(req, res) {
     if (channel === 'silicon' && apiName === 'PaddlePaddle/PaddleOCR-VL-1.5' && routerLabel) {
       responsePayload.routerResult = routerLabel;
     }
-    console.log(`✅ [完成] 成功返回结果给前端`); // 新增日志
     res.json(responsePayload);
 
   } catch (error) {
