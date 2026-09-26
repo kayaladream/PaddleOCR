@@ -280,26 +280,35 @@ export default async function handler(req, res) {
       }
 
       // 4. 下载并解析 JSONL 结果文件
-      // ⚠️ 修改点：百度 BOS 在海外极大概率无法直连，直接强制走代理，并设置 15 秒超时
-      let jsonlResponse;
+      // ⚠️ 修改点：增加超时时间至 60 秒，并加入 3 次重试机制
+      let jsonlResponse = null;
+      let downloadSuccess = false;
       const proxyJsonlUrl = `${process.env.PROXY_URL}/${encodeURIComponent(jsonlUrl)}`;
 
-      try {
-        console.log(`[网络检测] 正在通过阿里云代理下载结果文件（超时15秒）...`);
-        jsonlResponse = await fetchWithTimeout(proxyJsonlUrl, {
-          timeout: 15000,
-        });
-        if (jsonlResponse && jsonlResponse.ok) {
-          console.log(`✅ [网络检测] 代理下载结果成功！`);
-        } else {
-          console.log(`❌ [网络检测] 代理下载结果失败，状态码: ${jsonlResponse ? jsonlResponse.status : '未知'}`);
+      for (let i = 0; i < 3; i++) {
+        try {
+          console.log(`[网络检测] 正在通过阿里云代理下载结果文件（超时60秒，第 ${i + 1} 次尝试）...`);
+          jsonlResponse = await fetchWithTimeout(proxyJsonlUrl, {
+            timeout: 60000, // 提升至 60 秒
+          });
+          if (jsonlResponse && jsonlResponse.ok) {
+            console.log(`✅ [网络检测] 代理下载结果成功！`);
+            downloadSuccess = true;
+            break;
+          } else {
+            console.log(`❌ [网络检测] 代理下载结果失败，状态码: ${jsonlResponse ? jsonlResponse.status : '未知'}`);
+          }
+        } catch (proxyError) {
+          console.log(`⚠️ [网络检测] 代理下载结果尝试 ${i + 1} 失败: ${proxyError.message}`);
+          if (i < 2) {
+            console.log(`[网络检测] 等待 3 秒后进行下一次重试...`);
+            await new Promise(resolve => setTimeout(resolve, 3000));
+          }
         }
-      } catch (proxyError) {
-        throw new Error(`下载结果文件代理也失败: ${proxyError.message}`);
       }
 
-      if (!jsonlResponse || !jsonlResponse.ok) {
-        throw new Error(`获取结果文件失败，状态码 ${jsonlResponse ? jsonlResponse.status : '未知'}`);
+      if (!downloadSuccess || !jsonlResponse || !jsonlResponse.ok) {
+        throw new Error(`获取结果文件失败，已重试3次，请检查阿里云代理日志`);
       }
       
       const jsonlText = await jsonlResponse.text();
