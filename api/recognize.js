@@ -119,7 +119,7 @@ export default async function handler(req, res) {
       }
 
       const JOB_URL = 'https://paddleocr.aistudio-app.com/api/v2/ocr/jobs';
-      
+
       let actualModelName = 'PaddleOCR-VL-1.6';
       let optionalPayload = {};
 
@@ -196,7 +196,7 @@ export default async function handler(req, res) {
 
       // 3. 轮询结果
       let jsonlUrl = '';
-      const maxRetries = 40; 
+      const maxRetries = 40;
       let attempts = 0;
 
       while (attempts < maxRetries) {
@@ -224,8 +224,8 @@ export default async function handler(req, res) {
         }
 
         if (!pollResponse || !pollResponse.ok) {
-            console.log(`[轮询状态] 第 ${attempts} 次轮询返回状态码: ${pollResponse ? pollResponse.status : '未知'}`);
-            continue;
+          console.log(`[轮询状态] 第 ${attempts} 次轮询返回状态码: ${pollResponse ? pollResponse.status : '未知'}`);
+          continue;
         }
 
         const pollData = await pollResponse.json();
@@ -268,24 +268,31 @@ export default async function handler(req, res) {
 
       // 判断是否由代理提取过文本
       if (jsonlResponse.headers.get('x-extracted-text') === 'true') {
-          recognizedText = await jsonlResponse.text();
+        recognizedText = await jsonlResponse.text();
       } else {
-          // 直连返回的原始 JSONL，需要解析
-          const jsonlText = await jsonlResponse.text();
-          const lines = jsonlText.trim().split('\n').filter(Boolean);
-          if (lines.length > 0) {
-              const resultObj = JSON.parse(lines[0])?.result || {};
-              if (modelId === 'baidu-ocrv6' || modelId === 'baidu-ocrv5') {
-                  recognizedText = resultObj?.ocrResults
-                      ?.flatMap(res => res.prunedResult?.rec_texts || [])
-                      .filter(Boolean)
-                      .join('\n') || '';
-              } else {
-                  recognizedText = resultObj?.layoutParsingResults?.[0]?.markdown?.text || '';
-              }
-          } else {
-              recognizedText = '';
+        // 直连返回的原始 JSONL，需要解析（兼容处理）
+        const jsonlText = await jsonlResponse.text();
+        const lines = jsonlText.trim().split('\n').filter(Boolean);
+        if (lines.length > 0) {
+          // 取所有行的并集，防止漏掉内容
+          let fullText = '';
+          for (const line of lines) {
+            const resultObj = JSON.parse(line)?.result || {};
+            let lineText = '';
+            if (modelId === 'baidu-ocrv6' || modelId === 'baidu-ocrv5') {
+              lineText = resultObj?.ocrResults
+                ?.flatMap(res => res.prunedResult?.rec_texts || [])
+                .filter(Boolean)
+                .join('\n') || '';
+            } else {
+              lineText = resultObj?.layoutParsingResults?.[0]?.markdown?.text || '';
+            }
+            if (lineText) fullText += lineText + '\n\n';
           }
+          recognizedText = fullText.trim();
+        } else {
+          recognizedText = '';
+        }
       }
     }
 
@@ -374,7 +381,7 @@ export default async function handler(req, res) {
           console.log('DeepSeek rawText (after parse):', rawText.substring(0, 200));
 
           const looksLikeNoise = /(\d\.){5,}\d/.test(rawText) ||
-                                 /^[\d.#\s]+$/.test(rawText.trim());
+            /^[\d.#\s]+$/.test(rawText.trim());
 
           if (looksLikeNoise) {
             rawText = rawText.replace(/^\s*text\s*$/gim, '');
@@ -443,12 +450,12 @@ export default async function handler(req, res) {
       error: `${error.message}`,
       cause: error.cause
         ? {
-            code: error.cause.code,
-            message: error.cause.message,
-            errno: error.cause.errno,
-            syscall: error.cause.syscall,
-            hostname: error.cause.hostname,
-          }
+          code: error.cause.code,
+          message: error.cause.message,
+          errno: error.cause.errno,
+          syscall: error.cause.syscall,
+          hostname: error.cause.hostname,
+        }
         : null,
     });
   }
