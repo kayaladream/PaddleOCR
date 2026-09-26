@@ -1,6 +1,6 @@
 // api/recognize.js
 
-// ===== 新增：带超时控制的 fetch =====
+// ===== 带超时控制的 fetch =====
 async function fetchWithTimeout(resource, options = {}) {
   const { timeout = 5000, ...fetchOptions } = options;
   const controller = new AbortController();
@@ -65,11 +65,11 @@ async function autoDetectPrompt(imageData, mimeType, token) {
             { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageData}` } },
             { type: 'text', text: '请判断这张图片的主要核心内容属于哪一类：\nA. 纯文字\nB. 表格\nC. 数学公式\n你只能输出一个大写字母，不要包含任何标点符号和多余废话。' }
           ]
-        }),
+        }],
         max_tokens: 5,
         temperature: 0.1,
       }),
-      timeout: 10000, // 分类请求最多10秒
+      timeout: 10000,
     });
 
     if (!response.ok) return 'ERROR:';
@@ -461,15 +461,21 @@ export default async function handler(req, res) {
       console.error('底层原因 error.cause:', error.cause);
     }
 
-    res.status(500).json({
-      error: `${error.message}`,
-      cause: error.cause ? {
-            code: error.cause.code,
-            message: error.cause.message,
-            errno: error.cause.errno,
-            syscall: error.cause.syscall,
-            hostname: error.cause.hostname,
-        } : null,
-    });
+    // ⚠️ 这里提取为变量，彻底杜绝括号嵌套导致的 SyntaxError
+    const errorPayload = {
+      error: error.message || '未知错误'
+    };
+
+    if (error.cause) {
+      errorPayload.cause = {
+        code: error.cause.code,
+        message: error.cause.message,
+        errno: error.cause.errno,
+        syscall: error.cause.syscall,
+        hostname: error.cause.hostname,
+      };
+    }
+
+    res.status(500).json(errorPayload);
   }
 }
