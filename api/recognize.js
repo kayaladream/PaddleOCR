@@ -239,7 +239,7 @@ export default async function handler(req, res) {
           try {
             pollResponse = await fetch(proxyPollUrl, {
               headers: { 'Authorization': `bearer ${process.env.PADDLE_TOKEN}` },
-              signal: AbortSignal.timeout(10000)
+              signal: AbortSignal.timeout(20000)
             });
           } catch (proxyError) {
             console.log(`[网络检测] 轮询网络波动 (第 ${pollAttempts} 次): ${proxyError.message}`);
@@ -281,7 +281,7 @@ export default async function handler(req, res) {
         isDirectNetworkBad = true;
         console.log(`⚠️ [网络检测] 下载结果直连跳过/失败，通过云代理下载...`);
         try {
-          jsonlResponse = await fetch(proxyJsonlUrl, { signal: AbortSignal.timeout(15000) });
+          jsonlResponse = await fetch(proxyJsonlUrl, { signal: AbortSignal.timeout(60000) });
           if (jsonlResponse && jsonlResponse.ok) {
             console.log(`✅ [网络检测] 代理下载结果成功！`);
           }
