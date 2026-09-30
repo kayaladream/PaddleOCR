@@ -305,8 +305,12 @@ export default async function handler(req, res) {
             ?.flatMap(res => res.prunedResult?.rec_texts || [])
             .filter(Boolean)
             .join('\n') || '';
-        } else {
-          recognizedText = resultObj?.layoutParsingResults?.[0]?.markdown?.text || '';
+      } else {
+          // 遍历并拼接所有版面区块的 Markdown 文本
+          recognizedText = resultObj?.layoutParsingResults
+            ?.map(block => block?.markdown?.text)
+            .filter(Boolean)
+            .join('\n\n') || '';
         }
       } else {
         recognizedText = '';
