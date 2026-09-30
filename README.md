@@ -68,6 +68,7 @@ https://kayala.nyc.mn
 3. 在 Vercel 的部署设置 (Environment Variables) 中，**必须添加以下两个环境变量**：
    - `PADDLE_TOKEN` : 填入你获取的百度 AI Studio Token。
    - `SILICON_TOKEN` : 填入你获取的硅基流动 API Key。
+   - `PROXY_URL` : (可选但强烈推荐) 填入你的云代理服务地址，防止 Vercel 请求百度超时。具体部署方法见下方“高级玩法”。
 4. 点击 Deploy，部署完成后即可拥有自己的在线 OCR 工具！
 
 ### 方式二：本地开发部署
@@ -87,6 +88,7 @@ npm install
 在项目根目录创建 .env.local 文件，并填入以下内容：
 PADDLE_TOKEN=你的百度AI_Studio_Token
 SILICON_TOKEN=你的硅基流动API_Key
+PROXY_URL=你的云代理地址 (本地开发网络好可不填)
 ```
 
 ### 4.启动本地开发服务器
@@ -95,6 +97,20 @@ npm run dev
 ```
 
 应用将默认运行在 http://localhost:3000
+
+## ☁️ 高级玩法：部署专属云代理 (防止 Vercel 失联)
+由于 Vercel 的服务器位于海外，直连百度 AI Studio 接口时经常会遇到网络阻断或超时（尤其是在上传图片和下载文件阶段）。
+我们在项目代码的 cloud-proxy 目录下提供了一个轻量级的 Node.js 代理服务，你可以使用 Google Cloud Run 将其零成本部署：
+登录 Google Cloud Console，进入 Cloud Run。
+创建服务，选择 “从代码库持续部署”，绑定你的 GitHub 仓库。
+源码目录选择 /cloud-proxy（或者在根目录运行，自动识别该目录下的 package.json）。
+关键配置（保持免费的秘诀）：
+身份验证：允许未通过身份验证的调用。
+CPU 分配：仅在处理请求时分配 CPU。
+实例数下限：0 (一定要是 0，保证无人使用时休眠不扣费)。
+实例数上限：5 (防止恶意并发刷爆免费额度)。
+部署完成后，Google 会分配给你一个 HTTPS 域名（如 https://xxx.a.run.app）。
+将这个域名填入你 Vercel 的环境变量 PROXY_URL 中。系统在直连百度失败时，会自动通过该节点进行智能路由转发！
 
 ## 💡 使用建议
 - 复杂公式预览：对于解析出的大型数学公式（LaTeX），你可以直接将其复制到 StackEdit 实时预览完美排版。
